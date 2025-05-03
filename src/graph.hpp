@@ -90,6 +90,7 @@ template <typename T>
 void SparseGraph<T>::add_vertex(Vertex<T>* vert) {
     if (vertex_exists(vert->id)) throw std::runtime_error("Vertex already exists");
     vertices[vert->id] = vert;
+    ++n_vertices;
 }
 
 template <typename T>
@@ -98,6 +99,7 @@ void SparseGraph<T>::add_vertex(T id) {
     Vertex<T>* vert = new Vertex<T>;
     vert->id = id;
     vertices[id] = vert;
+    ++n_vertices;
 }
 
 template <typename T>
@@ -124,6 +126,7 @@ void SparseGraph<T>::remove_vertex(T id) {
     try {
         adjacency_list.erase(id);
         delete vertices[id];
+        --n_vertices;
     } catch (const std::exception e) {
         throw e;
     }
