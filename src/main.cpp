@@ -1,41 +1,50 @@
 #include <GL/glut.h>
 #include "graph.hpp"
 #include "graph_generator.hpp"
+#include "force_directed_layout.hpp"
 
 SparseGraph<int>* graph;
+ForceDirectedParams params;
+ForceDirectedLayout<int> layout;
 
 void genGraph() {
-    GraphGenerator<int> gen(5, 5, 3);
-    graph = gen.generate(10, 10, 1, 5, 0, 3);
+    GraphGenerator<int> gen(5, 5, 5);
+    graph = gen.generate(30, 10, 1, 5, 1, 30);
 }
 
 void display() {
     glClear(GL_COLOR_BUFFER_BIT);
+    
+    // Update layout
+    layout.calculate(*graph, params);
+    const auto& positions = layout.get_positions();
 
-    // Draw edges in green
-    glColor3f(0.0, 1.0, 0.0);
+
+    // Draw edges
+    glColor3f(0.4, 1.0, 0.4);
     glBegin(GL_LINES);
-    for (int i = 0; i < graph->n_vertices; ++i) {
-        const auto& adj = graph->get_adjacent(i);
-        for (int j : adj) {
-            Vertex<int>* v1 = graph->vertices[i];
-            Vertex<int>* v2 = graph->vertices[j];
-            glVertex2f((v1->id >> 2) * v1->id, (v1->id >> 2) * 13);
-            glVertex2f((v2->id >> 2) * v2->id, (v2->id >> 2) * 13);
+    for(const auto& edge : graph->adjacency_list) {
+        int src = edge.first;
+        int dest = edge.second;
+        if(positions.count(src) && positions.count(dest)) {
+            glVertex2f(positions.at(src).first, positions.at(src).second);
+            glVertex2f(positions.at(dest).first, positions.at(dest).second);
         }
     }
     glEnd();
 
-    // Draw vertices as white points
+    // Draw vertices
     glColor3f(1.0, 1.0, 1.0);
     glPointSize(8.0);
     glBegin(GL_POINTS);
-    for (const auto& v : graph->vertices) {
-        glVertex2f((v->id >> 2) * v->id, (v->id >> 2) * 13);
+    for(const auto& pos_entry : positions) {
+        const auto& pos = pos_entry.second;
+        glVertex2f(pos.first, pos.second);
     }
     glEnd();
 
     glutSwapBuffers();
+    glutPostRedisplay();
 }
 
 void reshape(int w, int h) {
@@ -47,20 +56,16 @@ void reshape(int w, int h) {
 }
 
 int main(int argc, char** argv) {
+    glutInit(&argc, argv);
+    glutInitWindowSize(params.width, params.height);
+    glutCreateWindow("Force-Directed Graph");
+    glOrtho(0, params.width, params.height, 0, -1, 1);
+   
     genGraph();
     std::cout << *graph << std::endl;
-
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
-    glutInitWindowSize(800, 600);
-    glutCreateWindow("Graph Display");
-
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f); 
-
+    
     glutDisplayFunc(display);
-    glutReshapeFunc(reshape);
-
     glutMainLoop();
-
     return 0;
 }
+
