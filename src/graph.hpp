@@ -1,6 +1,7 @@
 #ifndef EVA_GRAPH
 #define EVA_GRAPH
 
+#include <iostream>
 #include <map>
 #include <vector>
 #include <memory>
@@ -49,6 +50,8 @@ public:
     std::vector<T>  get_adjacent(T id);
 
     bool            vertex_exists(T id);
+
+    template <class U>friend std::ostream& operator<<(std::ostream& os, SparseGraph<U>&);
 
     T n_vertices;
     std::vector<Vertex<T>*, std::allocator<Vertex<T>*>> vertices;
@@ -176,5 +179,21 @@ bool SparseGraph<T>::vertex_exists(T id) {
         return false;
     }
 }
+
+template <class T>
+std::ostream& operator<<(std::ostream& os, SparseGraph<T>& graph) {
+        for (Vertex<T>* vert : graph.vertices) {
+            os << "(id: " << vert->id << ", adj: <";
+            for (T adj : graph.get_adjacent(vert->id)) {
+                os << adj << " ";
+            }
+            os << ">" << ", keywords: ";
+            for (int i = 0; i < MAX_KEYWORD_COUNT; i++) {
+                os << vert->keywords[i] << " ";
+            }
+            os << ");" << std::endl;
+        }
+        return os;
+    }
 
 #endif
