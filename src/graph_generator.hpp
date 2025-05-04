@@ -43,10 +43,15 @@ SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_ke
     for (T i = 0; i < n_vertices; ++i) {
         Vertex<T>* vert = new Vertex<T>;
         vert->id = i;
-        
+     
+        // We use -1 to represent null values of keywords here
+        for (T j = 0; j < MAX_KEYWORD_COUNT; ++j) {
+            vert->keywords[j] = -1;
+        }
+
         T vert_n_keywords = distribution(min_keywords, max_keywords); 
         for (T j = 0; j < vert_n_keywords; ++j) {
-            vert->keywords[j] = distribution(reinterpret_cast<T>(1), n_keywords);
+            vert->keywords[j] = distribution(0, n_keywords);
         }
 
         graph->add_vertex(vert);
