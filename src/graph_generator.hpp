@@ -3,36 +3,40 @@
 
 #include "graph.hpp"
 #include <random>
+#include <cmath>
 
 // This class randomly generates a graph according to user parameters
 // !! THE GRAPH CAN OUTLIVE THE GENERATOR !!
 template <typename T = int>
 class GraphGenerator {
 public:
-    GraphGenerator(int seed, float mean, float sigma);
-    ~GraphGenerator();
+    GraphGenerator(unsigned seed, float mean, float sigma);
+   // ~GraphGenerator();
 
-    SparseGraph<T> generate(T n_vertices, T n_keywords, T min_keywords, T max_keywords, T min_degree, T max_degree); 
+    SparseGraph<T>* generate(T n_vertices, T n_keywords, T min_keywords, T max_keywords, T min_degree, T max_degree); 
+    T               distribution(T min, T max);
 
 private:
-    std::mt19937* gen;
-    std::normal_distribution<T>* distribution;
+    unsigned seed;
+    float mean;
+    float sigma;
 };
 
 template <typename T>
-GraphGenerator<T>::GraphGenerator(int seed, float mean, float sigma) {
-    gen = new std::mt19937(seed);
-    distribution = new std::normal_distribution<T>(mean, sigma);
+GraphGenerator<T>::GraphGenerator(unsigned u_seed, float m, float s) {
+    seed = u_seed;
+    mean = m;
+    sigma = s;
 }
 
+/*
 template <typename T>
 GraphGenerator<T>::~GraphGenerator() {
     delete gen;
-    delete distribution;
-}
+}*/
 
 template <typename T>
-SparseGraph<T> GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_keywords, T max_keywords, T min_degree, T max_degree) {
+SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_keywords, T max_keywords, T min_degree, T max_degree) {
     SparseGraph<T>* graph = new SparseGraph<T>();
 
     // Generate vertices and populate with keywords
@@ -42,7 +46,7 @@ SparseGraph<T> GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_key
         
         T vert_n_keywords = distribution(min_keywords, max_keywords); 
         for (T j = 0; j < vert_n_keywords; ++j) {
-            vert->keywords[j] = distribution(dynamic_cast<T>(1), n_keywords);
+            vert->keywords[j] = distribution(reinterpret_cast<T>(1), n_keywords);
         }
 
         graph->add_vertex(vert);
@@ -53,12 +57,24 @@ SparseGraph<T> GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_key
         T n_edges = distribution(min_degree, max_degree);
         
         for (T j = 0; j < n_edges; ++j) {
-            T end = distribution(dynamic_cast<T>(0), n_vertices);
+            T end = distribution(reinterpret_cast<T>(0), n_vertices);
             graph->add_edge(i, end);
         }
     }
 
     return graph;
+}
+
+// Quick implementation which should probably be made more efficient later
+template <typename T>
+T GraphGenerator<T>::distribution(T min, T max) {
+    std::mt19937 gen(seed++);
+    std::normal_distribution<float> norm(mean, sigma);
+    T value;
+    do {
+        value = static_cast<T>(std::lround(norm(gen)));
+    } while (value < min || value > max);
+    return value;
 }
 
 #endif

@@ -31,7 +31,6 @@ public:
     ~SparseGraph();
 
     Vertex<T>*      operator[](T);
-    Vertex<T>*      operator[](int);
 
     void            add_vertex(Vertex<T>*);
     void            add_vertex(T id);
@@ -51,9 +50,8 @@ public:
 
     bool            vertex_exists(T id);
 
-private:
     T n_vertices;
-    std::vector<Vertex<T>*, std::allocator<T>> vertices;
+    std::vector<Vertex<T>*, std::allocator<Vertex<T>*>> vertices;
     std::multimap<T, T> adjacency_list; 
 };
 
@@ -82,14 +80,9 @@ Vertex<T>* SparseGraph<T>::operator[](T i) {
 }
 
 template <typename T>
-Vertex<T>* SparseGraph<T>::operator[](int i) {
-    return vertices[dynamic_cast<T>(i)];
-}
-
-template <typename T>
 void SparseGraph<T>::add_vertex(Vertex<T>* vert) {
     if (vertex_exists(vert->id)) throw std::runtime_error("Vertex already exists");
-    vertices[vert->id] = vert;
+    vertices.insert(vertices.begin() + vert->id, vert);
     ++n_vertices;
 }
 
@@ -98,18 +91,18 @@ void SparseGraph<T>::add_vertex(T id) {
     if (vertex_exists(id)) throw std::runtime_error("Vertex already exists");
     Vertex<T>* vert = new Vertex<T>;
     vert->id = id;
-    vertices[id] = vert;
+    vertices.insert(vertices.begin() + id, vert);
     ++n_vertices;
 }
 
 template <typename T>
 void SparseGraph<T>::add_edge(Vertex<T>* start, Vertex<T>* end) {
-    adjacency_list.insert(start->id, end->id);
+    add_edge(start->id, end->id);
 }
 
 template <typename T>
 void SparseGraph<T>::add_edge(T start, T end) {
-    adjacency_list.insert(start, end);
+    adjacency_list.insert({start, end});
 }
 
 template <typename T>
@@ -168,14 +161,20 @@ std::vector<T>  SparseGraph<T>::get_adjacent(T id) {
 
     auto range = adjacency_list.equal_range(id);
     for (auto it = range.first; it != range.second;) {
-        vec.push(*it);
+        vec.push_back((*it).second);
         ++it;
     }
+
+    return vec;
 }
 
 template <typename T>
 bool SparseGraph<T>::vertex_exists(T id) {
-    return vertices[id] != NULL;
+    try {
+        return vertices.at(id) != NULL;
+    } catch (const std::out_of_range& e) {
+        return false;
+    }
 }
 
 #endif
