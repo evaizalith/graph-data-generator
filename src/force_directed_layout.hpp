@@ -25,6 +25,7 @@ public:
     const std::map<T, std::pair<float, float>>& get_positions() const;
     void initialize_positions(SparseGraph<T>& graph, const ForceDirectedParams& params);
     void shift_to_middle(SparseGraph<T> graph, const ForceDirectedParams& params);
+    void reset_positions();
 
 private:
     std::map<T, std::pair<float, float>> positions;
@@ -103,6 +104,11 @@ void ForceDirectedLayout<T>::calculate(SparseGraph<T>& graph, const ForceDirecte
 template <typename T>
 const std::map<T, std::pair<float, float>>& ForceDirectedLayout<T>::get_positions() const {
     return positions;
+}
+
+template <typename T>
+void ForceDirectedLayout<T>::reset_positions() {
+    positions.clear();
 }
 
 template <typename T>

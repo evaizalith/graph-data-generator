@@ -66,9 +66,14 @@ SparseGraph<T>::SparseGraph() {
 
 template <typename T>
 SparseGraph<T>::~SparseGraph() {
-    for (auto it = vertices.begin(); it != vertices.end(); it++) {
-        delete *it;
+    adjacency_list.clear();
+
+    for (Vertex<T>* vert : vertices) {
+        delete vert;
     }
+
+    vertices.clear();
+    vertices.shrink_to_fit();
 }
 
 template <typename T>

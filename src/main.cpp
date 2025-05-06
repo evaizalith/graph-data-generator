@@ -24,6 +24,10 @@ struct graph_p {
 
 void genGraph() {
     GraphGenerator<int> gen(std::time(nullptr), 5, 5);
+    
+    if (graph) delete graph;
+    layout.reset_positions();
+
     graph = gen.generate(
             graph_p.n_vertices,
             graph_p.n_keywords,
@@ -40,7 +44,6 @@ void showMenu(ImGuiIO& io) {
     ImGui::Begin("Graph Generator");                          
 
     ImGui::TextWrapped("Modify the parameters of the graph and press 'Generate Graph' when you're done.");  
-    //ImGui::Checkbox("Another Window", &show_another_window);
 
     ImGui::InputInt("Number of Vertices", &graph_p.n_vertices);
     ImGui::InputInt("Min Degree", &graph_p.min_degree);
@@ -54,23 +57,24 @@ void showMenu(ImGuiIO& io) {
 
     if (ImGui::Button("Generate Graph"))                            
         genGraph();
-    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+    ImGui::TextWrapped("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
     ImGui::End();
 }
 
 void drawGraph() {
     layout.calculate(*graph, params);
-    const auto& positions = layout.get_positions();
+    const std::map<int, std::pair<float, float>>& positions = layout.get_positions();
 
     // Draw edges
     glColor3f(graph_p.edge_color.x, graph_p.edge_color.y, graph_p.edge_color.z);
-    glBegin(GL_LINES);
+    glBegin(GL_TRIANGLES);
     for(const auto& edge : graph->adjacency_list) {
         int src = edge.first;
         int dest = edge.second;
         if(positions.count(src) && positions.count(dest)) {
-            glVertex2f(positions.at(src).first, positions.at(src).second);
-            glVertex2f(positions.at(dest).first, positions.at(dest).second);
+            glVertex2f(positions.at(src).first + 1, positions.at(src).second + 1);
+            glVertex2f(positions.at(dest).first - 1, positions.at(dest).second - 1);
+            glVertex2f(positions.at(src).first - 3, positions.at(src).second + 3);
         }
     }
     glEnd();
@@ -85,7 +89,6 @@ void drawGraph() {
     }
     glEnd();
 
-    delete positions;
 }
 
 void display() {
