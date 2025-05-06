@@ -9,12 +9,12 @@
 #include <algorithm>
 
 struct ForceDirectedParams {
-    float width = 800.0f;
-    float height = 600.0f;
+    float width = 1000.0f;
+    float height = 800.0f;
     float k_repulsion = 2000.0f;
     float k_attraction = 0.2f;
     float ideal_length = 200.0f;
-    float time_step = 0.1f;
+    float time_step = 0.01f;
     int max_iterations = 100;
 };
 
@@ -23,40 +23,46 @@ class ForceDirectedLayout {
 public:
     void calculate(SparseGraph<T>& graph, const ForceDirectedParams& params);
     const std::map<T, std::pair<float, float>>& get_positions() const;
+    void initialize_positions(SparseGraph<T>& graph, const ForceDirectedParams& params);
 
 private:
     std::map<T, std::pair<float, float>> positions;
-    void initialize_positions(SparseGraph<T>& graph, const ForceDirectedParams& params);
     std::vector<T> get_all_vertex_ids(SparseGraph<T>& graph);
+    size_t counter = 0; 
 
 };
 
 template <typename T>
 void ForceDirectedLayout<T>::calculate(SparseGraph<T>& graph, const ForceDirectedParams& params) {
+    counter = 0;
     initialize_positions(graph, params);
-    
     for(int iter = 0; iter < params.max_iterations; ++iter) {
         std::map<T, std::pair<float, float>> forces;
 
-        // Repulsive forces between all vertices
+        std::srand(std::time(nullptr) * ++counter);
+       
         auto vertex_ids = get_all_vertex_ids(graph);
-        for(size_t i = 0; i < vertex_ids.size(); ++i) {
-            for(size_t j = i+1; j < vertex_ids.size(); ++j) {
-                T id1 = vertex_ids[i];
-                T id2 = vertex_ids[j];
-                auto& pos1 = positions[id1];
-                auto& pos2 = positions[id2];
-                
-                float dx = pos2.first - pos1.first;
-                float dy = pos2.second - pos1.second;
-                float distance = std::hypot(dx, dy) + 0.01f;
-                float force = params.k_repulsion / (distance * distance);
-                
-                forces[id1].first -= (dx / distance) * force;
-                forces[id1].second -= (dy / distance) * force;
-                forces[id2].first += (dx / distance) * force;
-                forces[id2].second += (dy / distance) * force;
-            }
+
+        // Repulsive forces between all vertices
+        
+        // As a temporary measure to make software rendering faster, we apply repulsion stochastically
+        size_t i = (static_cast<size_t>(std::rand()) * RAND_MAX) % vertex_ids.size();
+        //size_t i = counter++ % vertex_ids.size();
+        for(size_t j = 0; j < vertex_ids.size(); ++j) {
+            T id1 = vertex_ids[i];
+            T id2 = vertex_ids[j];
+            auto& pos1 = positions[id1];
+            auto& pos2 = positions[id2];
+            
+            float dx = pos2.first - pos1.first;
+            float dy = pos2.second - pos1.second;
+            float distance = std::hypot(dx, dy) + 0.01f;
+            float force = params.k_repulsion / (distance * distance);
+            
+            forces[id1].first -= (dx / distance) * force;
+            forces[id1].second -= (dy / distance) * force;
+            forces[id2].first += (dx / distance) * force;
+            forces[id2].second += (dy / distance) * force;
         }
 
         // Attractive forces between connected vertices
@@ -102,7 +108,7 @@ const std::map<T, std::pair<float, float>>& ForceDirectedLayout<T>::get_position
 template <typename T>
 void ForceDirectedLayout<T>::initialize_positions(SparseGraph<T>& graph, const ForceDirectedParams& params) {
     if(positions.empty()) {
-        std::srand(std::time(0));
+        std::srand(std::time(nullptr));
         for(size_t i = 0; i < graph.vertices.size(); ++i) {
             if(graph.vertex_exists(static_cast<T>(i))) {
                 positions[static_cast<T>(i)] = {

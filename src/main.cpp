@@ -8,8 +8,8 @@ ForceDirectedParams params;
 ForceDirectedLayout<int> layout;
 
 void genGraph() {
-    GraphGenerator<int> gen(5, 5, 5);
-    graph = gen.generate(30, 10, 1, 5, 1, 30);
+    GraphGenerator<int> gen(1, 5, 5);
+    graph = gen.generate(30, 10, 1, 5, 1, 10);
 }
 
 void display() {
@@ -18,7 +18,6 @@ void display() {
     // Update layout
     layout.calculate(*graph, params);
     const auto& positions = layout.get_positions();
-
 
     // Draw edges
     glColor3f(0.4, 1.0, 0.4);
@@ -35,7 +34,7 @@ void display() {
 
     // Draw vertices
     glColor3f(1.0, 1.0, 1.0);
-    glPointSize(8.0);
+    glPointSize(6.0);
     glBegin(GL_POINTS);
     for(const auto& pos_entry : positions) {
         const auto& pos = pos_entry.second;
@@ -56,12 +55,14 @@ void reshape(int w, int h) {
 }
 
 int main(int argc, char** argv) {
+    genGraph();
+    layout.initialize_positions(*graph, params);
+
     glutInit(&argc, argv);
     glutInitWindowSize(params.width, params.height);
-    glutCreateWindow("Force-Directed Graph");
+    glutCreateWindow("Graph Data Generator");
     glOrtho(0, params.width, params.height, 0, -1, 1);
    
-    genGraph();
     std::cout << *graph << std::endl;
     
     glutDisplayFunc(display);
