@@ -39,6 +39,18 @@ void genGraph() {
     layout.initialize_positions(*graph, params);
 }
 
+void reshape(int w, int h) {
+    params.width = w;
+    params.height = h;
+    glViewport(0, 0, w, h);
+    glLoadIdentity();
+    glOrtho(0, w, h, 0, -1, 1);
+
+    glutPostRedisplay();
+
+    layout.initialize_positions(*graph, params);
+}
+
 void showMenu(ImGuiIO& io) {
     
     ImGui::Begin("Graph Generator");                          
@@ -99,6 +111,9 @@ void display() {
     ImGui::NewFrame();
     ImGuiIO& io = ImGui::GetIO();
 
+    if (params.width != io.DisplaySize.x || params.height != io.DisplaySize.y)
+        reshape(io.DisplaySize.x, io.DisplaySize.y);
+
     showMenu(io);
     drawGraph();
 
@@ -109,21 +124,6 @@ void display() {
     glutSwapBuffers();
     glutPostRedisplay();
 
-}
-
-void reshape(int w, int h) {
-    std::cout << params.width << ", " << params.height << std::endl;
-    params.width = w;
-    params.height = h;
-    glViewport(0, 0, w, h);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluOrtho2D(0, w, 0, h);
-    glMatrixMode(GL_MODELVIEW);
-    layout.shift_to_middle(*graph, params);
-    //layout.initialize_positions(*graph, params);
-
-    glutPostRedisplay();
 }
 
 int main(int argc, char** argv) {
@@ -137,15 +137,11 @@ int main(int argc, char** argv) {
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
 
-    // Initialize ImGui
-    // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    //ImGui::CreateContext();
 
-    // Setup Platform/Renderer backends
     ImGui_ImplGLUT_Init();
     ImGui_ImplOpenGL3_Init();
     ImGui_ImplGLUT_InstallFuncs();
