@@ -24,6 +24,7 @@ public:
     void calculate(SparseGraph<T>& graph, const ForceDirectedParams& params);
     const std::map<T, std::pair<float, float>>& get_positions() const;
     void initialize_positions(SparseGraph<T>& graph, const ForceDirectedParams& params);
+    void shift_to_middle(SparseGraph<T> graph, const ForceDirectedParams& params);
 
 private:
     std::map<T, std::pair<float, float>> positions;
@@ -35,7 +36,6 @@ private:
 template <typename T>
 void ForceDirectedLayout<T>::calculate(SparseGraph<T>& graph, const ForceDirectedParams& params) {
     counter = 0;
-    initialize_positions(graph, params);
     for(int iter = 0; iter < params.max_iterations; ++iter) {
         std::map<T, std::pair<float, float>> forces;
 
@@ -107,7 +107,6 @@ const std::map<T, std::pair<float, float>>& ForceDirectedLayout<T>::get_position
 
 template <typename T>
 void ForceDirectedLayout<T>::initialize_positions(SparseGraph<T>& graph, const ForceDirectedParams& params) {
-    if(positions.empty()) {
         std::srand(std::time(nullptr));
         for(size_t i = 0; i < graph.vertices.size(); ++i) {
             if(graph.vertex_exists(static_cast<T>(i))) {
@@ -117,6 +116,17 @@ void ForceDirectedLayout<T>::initialize_positions(SparseGraph<T>& graph, const F
                 };
             }
         }
+}
+
+template <typename T>
+void ForceDirectedLayout<T>::shift_to_middle(SparseGraph<T> graph, const ForceDirectedParams& params) {
+    if (positions.empty()) return;
+
+    for (size_t i = 0; i < graph.vertices.size(); ++i) {
+        positions[static_cast<T>(i)] = {
+            (params.width - positions[i].first) + (params.width / 2),
+            (params.width - positions[i].second) + (params.height / 2)
+        };
     }
 }
 
