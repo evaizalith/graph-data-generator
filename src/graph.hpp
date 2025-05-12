@@ -18,8 +18,8 @@ struct Vertex {
 };
 
 template <typename T>
-struct WeightedEdge {
-    Vertex<T>* end;
+struct Edge {
+    T end;
     T weight;
 };
 
@@ -35,8 +35,8 @@ public:
 
     void            add_vertex(Vertex<T>*);
     void            add_vertex(T id);
-    void            add_edge(Vertex<T>* start, Vertex<T>* end);
-    void            add_edge(T start, T end);
+    void            add_edge(Vertex<T>* start, Vertex<T>* end, T weight);
+    void            add_edge(T start, T end, T weight);
     
     // Deletes memory associated with vertices
     void            remove_vertex(Vertex<T>*);
@@ -46,8 +46,8 @@ public:
     void            remove_edge(T start, T end);
     
     // Get all vertices connected by an edge
-    std::vector<T>  get_adjacent(Vertex<T>*);
-    std::vector<T>  get_adjacent(T id);
+    std::vector<Edge<T>>  get_adjacent(Vertex<T>*);
+    std::vector<Edge<T>>  get_adjacent(T id);
 
     bool            vertex_exists(T id);
 
@@ -55,7 +55,7 @@ public:
 
     T n_vertices;
     std::vector<Vertex<T>*, std::allocator<Vertex<T>*>> vertices;
-    std::multimap<T, T> adjacency_list; 
+    std::multimap<T, Edge<T>> adjacency_list; 
 };
 
 template <typename T>
@@ -104,13 +104,14 @@ void SparseGraph<T>::add_vertex(T id) {
 }
 
 template <typename T>
-void SparseGraph<T>::add_edge(Vertex<T>* start, Vertex<T>* end) {
-    add_edge(start->id, end->id);
+void SparseGraph<T>::add_edge(Vertex<T>* start, Vertex<T>* end, T weight) {
+    add_edge(start->id, end->id, weight);
 }
 
 template <typename T>
-void SparseGraph<T>::add_edge(T start, T end) {
-    adjacency_list.insert({start, end});
+void SparseGraph<T>::add_edge(T start, T end, T weight) {
+    Edge<T> edge = {end, weight};
+    adjacency_list.insert({start, edge});
 }
 
 template <typename T>
@@ -147,7 +148,7 @@ void SparseGraph<T>::remove_edge(T start, T end) {
     try {
         auto range = adjacency_list.equal_range(start);
         for (auto it = range.first; it != range.second;) {
-            if (it->second == end) {
+            if (it->second.end == end) {
                 it = adjacency_list.erase(it);
             } else {
                 ++it;
@@ -159,13 +160,13 @@ void SparseGraph<T>::remove_edge(T start, T end) {
 }
 
 template <typename T>
-std::vector<T>  SparseGraph<T>::get_adjacent(Vertex<T>* vert) {
+std::vector<Edge<T>>  SparseGraph<T>::get_adjacent(Vertex<T>* vert) {
     return get_adjacent(vert->id);
 }
 
 template <typename T>
-std::vector<T>  SparseGraph<T>::get_adjacent(T id) {
-    std::vector<T> vec;
+std::vector<Edge<T>>  SparseGraph<T>::get_adjacent(T id) {
+    std::vector<Edge<T>> vec;
 
     auto range = adjacency_list.equal_range(id);
     for (auto it = range.first; it != range.second;) {
@@ -189,8 +190,8 @@ template <class T>
 std::ostream& operator<<(std::ostream& os, SparseGraph<T>& graph) {
         for (Vertex<T>* vert : graph.vertices) {
             os << "(id: " << vert->id << ", adj: <";
-            for (T adj : graph.get_adjacent(vert->id)) {
-                os << adj << " ";
+            for (Edge<T> adj : graph.get_adjacent(vert->id)) {
+                os << "(" << adj.end << ", " << adj.weight << ")" << " ";
             }
             os << ">" << ", keywords: ";
             for (int i = 0; i < MAX_KEYWORD_COUNT; i++) {

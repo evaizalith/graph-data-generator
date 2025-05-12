@@ -69,14 +69,14 @@ void ForceDirectedLayout<T>::calculate(SparseGraph<T>& graph, const ForceDirecte
         // Attractive forces between connected vertices
         for(const auto& edge : graph.adjacency_list) {
             T src = edge.first;
-            T dest = edge.second;
+            T dest = edge.second.end;
             
             auto& pos_src = positions[src];
             auto& pos_dest = positions[dest];
             float dx = pos_dest.first - pos_src.first;
             float dy = pos_dest.second - pos_src.second;
             float distance = std::hypot(dx, dy) + 0.01f;
-            float force = (distance - params.ideal_length) * params.k_attraction;
+            float force = (distance - params.ideal_length) * params.k_attraction * edge.second.weight;
             
             forces[src].first += (dx / distance) * force;
             forces[src].second += (dy / distance) * force;

@@ -13,7 +13,7 @@ public:
     GraphGenerator(unsigned seed, float mean, float sigma);
    // ~GraphGenerator();
 
-    SparseGraph<T>* generate(T n_vertices, T n_keywords, T min_keywords, T max_keywords, T min_degree, T max_degree); 
+    SparseGraph<T>* generate(T n_vertices, T n_keywords, T min_keywords, T max_keywords, T min_degree, T max_degree, T min_weight, T max_weight); 
     T               distribution(T min, T max);
 
 private:
@@ -36,7 +36,7 @@ GraphGenerator<T>::~GraphGenerator() {
 }*/
 
 template <typename T>
-SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_keywords, T max_keywords, T min_degree, T max_degree) {
+SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_keywords, T max_keywords, T min_degree, T max_degree, T min_weight, T max_weight) {
     SparseGraph<T>* graph = new SparseGraph<T>();
 
     // Generate vertices and populate with keywords
@@ -63,14 +63,16 @@ SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_ke
         
         for (T j = 0; j < n_edges; ++j) {
             T end = distribution(reinterpret_cast<T>(0), n_vertices);
-            graph->add_edge(i, end);
+            T weight = distribution(min_weight, max_weight);
+            graph->add_edge(i, end, weight);
         }
     }
 
     return graph;
 }
 
-// Quick implementation which should probably be made more efficient later
+// Quick implementation. Later this needs to be changed to a Strategy pattern to allow for
+// different distributions to be used
 template <typename T>
 T GraphGenerator<T>::distribution(T min, T max) {
     std::mt19937 gen(seed++);
