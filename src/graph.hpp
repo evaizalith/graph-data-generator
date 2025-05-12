@@ -4,6 +4,7 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include <set>
 #include <memory>
 #include <stdexcept>
 #include <imgui.h>
@@ -29,7 +30,7 @@ struct GraphParameters {
 template <typename T>
 struct Vertex {
     T id;
-    T keywords[MAX_KEYWORD_COUNT]; 
+    std::set<T> keywords;
 };
 
 template <typename T>
@@ -52,6 +53,9 @@ public:
     void            add_vertex(T id);
     void            add_edge(Vertex<T>* start, Vertex<T>* end, T weight);
     void            add_edge(T start, T end, T weight);
+    void            add_keyword(Vertex<T>*, T word);
+    void            add_keyword(T id, T word);
+
     
     // Deletes memory associated with vertices
     void            remove_vertex(Vertex<T>*);
@@ -116,6 +120,16 @@ void SparseGraph<T>::add_vertex(T id) {
     vert->id = id;
     vertices.insert(vertices.begin() + id, vert);
     ++n_vertices;
+}
+
+template <typename T>
+void SparseGraph<T>::add_keyword(Vertex<T>* vert, T word) {
+    vert->keywords.insert(word);
+}
+
+template <typename T>
+void SparseGraph<T>::add_keyword(T id, T word) {
+    add_keyword(&vertices[id], word);
 }
 
 template <typename T>
@@ -209,8 +223,8 @@ std::ostream& operator<<(std::ostream& os, SparseGraph<T>& graph) {
                 os << "(" << adj.end << ", " << adj.weight << ")" << " ";
             }
             os << ">" << ", keywords: ";
-            for (int i = 0; i < MAX_KEYWORD_COUNT; i++) {
-                os << vert->keywords[i] << " ";
+            for (const auto& word : vert->keywords) {
+                os << word << " ";
             }
             os << ");" << std::endl;
         }
