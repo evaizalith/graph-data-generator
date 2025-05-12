@@ -11,18 +11,7 @@ SparseGraph<int>* graph;
 ForceDirectedParams params;
 ForceDirectedLayout<int> layout;
 
-struct graph_p {
-    int n_vertices = 30;
-    int n_keywords = 10;
-    int min_degree = 1;
-    int max_degree = 5;
-    int min_keywords = 1;
-    int max_keywords = 5;
-    int min_weight = 1;
-    int max_weight = 10;
-    ImVec4 vertex_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-    ImVec4 edge_color = ImVec4(0.0f, 1.0f, 0.0f, 1.00f);
-} graph_p;
+GraphParameters graph_p;
 
 void genGraph() {
     GraphGenerator<int> gen(std::time(nullptr), 5, 5);

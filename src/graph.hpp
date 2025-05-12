@@ -6,9 +6,24 @@
 #include <vector>
 #include <memory>
 #include <stdexcept>
+#include <imgui.h>
 
 // Max keyword count should equal 2^N - 1 where N is some integer to ensure that the Vertex struct is packed properly for memory purposes
 #define MAX_KEYWORD_COUNT 15
+
+// Basic graph parameter class with some default values
+struct GraphParameters {
+    int n_vertices = 30;
+    int n_keywords = 10;
+    int min_degree = 1;
+    int max_degree = 5;
+    int min_keywords = 1;
+    int max_keywords = 5;
+    int min_weight = 1;
+    int max_weight = 10;
+    ImVec4 vertex_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+    ImVec4 edge_color = ImVec4(0.0f, 1.0f, 0.0f, 1.00f);
+};
 
 // We make use of templates for the Vertex struct and the SparseGraph class primarily so that the user may select the most memory efficient data type. If you don't need more than 256 unique vertices, you don't need more than a uint8_t, otherwise you might need a uint16_t or a uint32_t, etc.
 template <typename T>
