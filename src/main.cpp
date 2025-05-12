@@ -18,6 +18,8 @@ struct graph_p {
     int max_degree = 5;
     int min_keywords = 1;
     int max_keywords = 5;
+    int min_weight = 1;
+    int max_weight = 10;
     ImVec4 vertex_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
     ImVec4 edge_color = ImVec4(0.0f, 1.0f, 0.0f, 1.00f);
 } graph_p;
@@ -34,7 +36,9 @@ void genGraph() {
             graph_p.min_keywords,
             graph_p.max_keywords,
             graph_p.min_degree,
-            graph_p.max_degree);
+            graph_p.max_degree,
+            graph_p.min_weight,
+            graph_p.max_weight);
     std::cout << *graph << std::endl;
     layout.initialize_positions(*graph, params);
 }
@@ -63,6 +67,9 @@ void showMenu(ImGuiIO& io) {
     ImGui::InputInt("Number of Keywords", &graph_p.n_keywords);
     ImGui::InputInt("Min Keywords", &graph_p.min_keywords);
     ImGui::InputInt("Max Keywords", &graph_p.max_keywords);
+    ImGui::InputInt("Min Weight", &graph_p.min_weight);
+    ImGui::InputInt("Max Weight", &graph_p.max_weight);
+
 
     ImGui::ColorEdit3("Vertex Color", (float*)&graph_p.vertex_color);
     ImGui::ColorEdit3("Edge Color", (float*)&graph_p.edge_color);
@@ -82,7 +89,7 @@ void drawGraph() {
     glBegin(GL_TRIANGLES);
     for(const auto& edge : graph->adjacency_list) {
         int src = edge.first;
-        int dest = edge.second;
+        int dest = edge.second.end;
         if(positions.count(src) && positions.count(dest)) {
             glVertex2f(positions.at(src).first + 1, positions.at(src).second + 1);
             glVertex2f(positions.at(dest).first - 1, positions.at(dest).second - 1);
