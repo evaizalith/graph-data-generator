@@ -76,12 +76,8 @@ SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_ke
 template <typename T>
 T GraphGenerator<T>::distribution(T min, T max) {
     std::mt19937 gen(seed++);
-    std::normal_distribution<float> norm(mean, sigma);
-    T value;
-    do {
-        value = static_cast<T>(std::lround(norm(gen)));
-    } while (value < min || value > max);
-    return value;
+    std::uniform_int_distribution<T> distribution(min, max);
+    return distribution(gen);
 }
 
 #endif
