@@ -3,7 +3,6 @@
 
 #include "graph.hpp"
 #include <random>
-#include <cmath>
 
 // This class randomly generates a graph according to user parameters
 // !! THE GRAPH CAN OUTLIVE THE GENERATOR !!
@@ -44,14 +43,9 @@ SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_ke
         Vertex<T>* vert = new Vertex<T>;
         vert->id = i;
      
-        // We use -1 to represent null values of keywords here
-        for (T j = 0; j < MAX_KEYWORD_COUNT; ++j) {
-            vert->keywords[j] = -1;
-        }
-
         T vert_n_keywords = distribution(min_keywords, max_keywords); 
         for (T j = 0; j < vert_n_keywords; ++j) {
-            vert->keywords[j] = distribution(0, n_keywords);
+            vert->keywords.insert(distribution(0, n_keywords));
         }
 
         graph->add_vertex(vert);
