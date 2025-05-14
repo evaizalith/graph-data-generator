@@ -43,12 +43,12 @@ SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_ke
         Vertex<T>* vert = new Vertex<T>;
         vert->id = i;
      
+        graph->add_vertex(vert);
+
         T vert_n_keywords = distribution(min_keywords, max_keywords); 
         for (T j = 0; j < vert_n_keywords; ++j) {
-            vert->keywords.insert(distribution(0, n_keywords));
+            graph->add_keyword(vert, distribution(0, n_keywords));
         }
-
-        graph->add_vertex(vert);
     }
 
     // Generate edges

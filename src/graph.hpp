@@ -72,9 +72,10 @@ public:
 
     template <class U>friend std::ostream& operator<<(std::ostream& os, SparseGraph<U>&);
 
-    T n_vertices;
+    T                                                   n_vertices;
     std::vector<Vertex<T>*, std::allocator<Vertex<T>*>> vertices;
-    std::multimap<T, Edge<T>> adjacency_list; 
+    std::multimap<T, Edge<T>>                           adjacency_list; 
+    std::multimap<T, T>                                 reverse_index;  // Stores a list of every vertex with a given keyword 
 };
 
 template <typename T>
@@ -125,6 +126,16 @@ void SparseGraph<T>::add_vertex(T id) {
 template <typename T>
 void SparseGraph<T>::add_keyword(Vertex<T>* vert, T word) {
     vert->keywords.insert(word);
+   
+    // Check for duplicates in reverse_index, return early if found
+    auto range = reverse_index.equal_range(word);
+    for (auto it = range.first; it != range.second; ++it) {
+        if (it->second == vert->id) {
+            return;
+        }
+    }
+
+    reverse_index.insert({word, vert->id});
 }
 
 template <typename T>
@@ -228,6 +239,7 @@ std::ostream& operator<<(std::ostream& os, SparseGraph<T>& graph) {
             }
             os << ");" << std::endl;
         }
+
         return os;
     }
 
