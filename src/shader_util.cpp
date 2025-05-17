@@ -2,6 +2,9 @@
 #include <fstream>
 #include <sstream>
 #include "shader_util.hpp"
+#include <filesystem>
+
+const std::string SHADER_PATH = "../shaders/";
 
 GLuint compileShader(GLenum type, const std::string& source) {
     GLuint shader = glCreateShader(type);
@@ -22,7 +25,7 @@ GLuint compileShader(GLenum type, const std::string& source) {
 }
 
 std::string readFile(const std::string& path) {
-    std::ifstream file(path);
+    std::ifstream file(SHADER_PATH + path);
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open file: " + path);
     }
