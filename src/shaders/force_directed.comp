@@ -1,0 +1,63 @@
+#version 450 core
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+struct Node {
+    vec2 position;
+    vec2 velocity;
+};
+
+struct Edge {
+    int from;
+    int to;
+    float weight;
+};
+
+// Double buffering to avoid race conditions
+layout(std430, binding = 0) readonly buffer CurrentNodes { Node currentNodes[]; };
+layout(std430, binding = 1) buffer NextNodes { Node nextNodes[]; };
+layout(std430, binding = 2) readonly buffer Edges { Edge edges[]; };
+
+uniform float deltaTime;
+uniform float k_repel = 100.0;    // Repulsion constant
+uniform float k_attract = 0.1;    // Attraction constant
+uniform float idealLength = 50.0; // Ideal edge length
+uniform float damping = 0.95;     // Velocity damping
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= currentNodes.length()) return;
+
+    Node current = currentNodes[i];
+    vec2 force = vec2(0.0);
+
+    // Repulsion from all other nodes
+    for (uint j = 0; j < currentNodes.length(); ++j) {
+        if (i == j) continue;
+        Node other = currentNodes[j];
+        vec2 delta = current.position - other.position;
+        float dist = length(delta);
+        if (dist > 0.0) {
+            force += k_repel * delta / (dist * dist + 0.01);
+        }
+    }
+
+    // Attraction from connected edges
+    for (uint e = 0; e < edges.length(); ++e) {
+        Edge edge = edges[e];
+        if (edge.from != i && edge.to != i) continue;
+        int otherId = (edge.from == i) ? edge.to : edge.from;
+        Node other = currentNodes[otherId];
+        vec2 delta = other.position - current.position;
+        float dist = length(delta);
+        if (dist > 0.0) {
+            float factor = k_attract * (dist - idealLength * edge.weight) / dist;
+            force += delta * factor;
+        }
+    }
+
+    Node next;
+    next.velocity = current.velocity + force * deltaTime;
+    next.velocity *= damping;
+    next.position = current.position + next.velocity * deltaTime;
+    nextNodes[i] = next;
+}
