@@ -16,7 +16,6 @@ GLFWwindow* window;
 
 SparseGraph<int>* graph;
 ForceDirectedParams params;
-//ForceDirectedLayout<int> layout;
 GPUGraph* gpuGraph;
 
 GraphParameters graph_p;
@@ -29,9 +28,11 @@ float d_h;
 struct View_t {
     float x = 0;
     float y = 0;
+    float zoom = 1.0f;
 } view;
 
 int MOVE_SENSITIVITY = 10; // Determines camera panning speed
+float ZOOM_SENSITIVITY = 0.1f;
 
 void genGraph() {
     GraphGenerator<int> gen(std::time(nullptr), 5, 5);
@@ -83,6 +84,13 @@ void keyboard_input(GLFWwindow *win, int key, int scancode, int action, int mods
     if (key == GLFW_KEY_D && action == GLFW_REPEAT) {
         view.x += MOVE_SENSITIVITY;
     }
+    if (key == GLFW_KEY_PAGE_UP && action == GLFW_PRESS) {
+        view.zoom += ZOOM_SENSITIVITY;
+    }
+    if (key == GLFW_KEY_PAGE_DOWN && action == GLFW_PRESS) {
+        view.zoom -= ZOOM_SENSITIVITY;
+    }
+
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         exit(0);
     }
@@ -127,7 +135,7 @@ void display() {
     showMenu(io);
 
     gpuGraph->simulate(0.016f);
-    glm::mat4 proj = glm::ortho(d_w + view.x, (float)params.width + view.x, d_h + view.y, (float)params.height + view.y);
+    glm::mat4 proj = glm::ortho((d_w + view.x) / view.zoom, ((float)params.width + view.x) / view.zoom, (d_h + view.y) / view.zoom, ((float)params.height + view.y) / view.zoom);
 
     gpuGraph->render(proj);
 
@@ -204,10 +212,12 @@ int main(int argc, char** argv) {
 
     glfwSetKeyCallback(window, keyboard_input);
 
+    glPointSize(6);
+
     int flags; 
     glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
-    if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
-    /*{
+    /*if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
+    {
         glEnable(GL_DEBUG_OUTPUT);
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); 
         glDebugMessageCallback(glDebugOutput, nullptr);
