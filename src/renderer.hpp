@@ -29,6 +29,9 @@ public:
     void simulate(float dt);
     void render(glm::mat4 projection);
 
+    int screenWidth = 1000;
+    int screenHeight = 800;
+
 private:
     GLuint nodeSSBOs[2];
     GLuint edgeSSBO;
