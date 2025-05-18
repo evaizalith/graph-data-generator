@@ -1,23 +1,45 @@
-#include <GL/glut.h>
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <imgui_stdlib.h>
+#include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-#include <imgui_impl_glut.h>
+#include <cstdlib>
 #include "graph.hpp"
 #include "graph_generator.hpp"
 #include "force_directed_layout.hpp"
+#include "renderer.hpp"
+
+#define GLEW_STATIC
+
+GLFWwindow* window;
 
 SparseGraph<int>* graph;
 ForceDirectedParams params;
-ForceDirectedLayout<int> layout;
+GPUGraph* gpuGraph;
 
 GraphParameters graph_p;
+
+int original_w = params.width;
+int original_h = params.height;
+float d_w;
+float d_h;
+
+struct View_t {
+    float x = 0;
+    float y = 0;
+    float zoom = 1.0f;
+} view;
+
+int MOVE_SENSITIVITY = 10; // Determines camera panning speed
+float ZOOM_SENSITIVITY = 0.1f;
 
 void genGraph() {
     GraphGenerator<int> gen(std::time(nullptr), 5, 5);
     
     if (graph) delete graph;
-    layout.reset_positions();
+    if (gpuGraph) delete gpuGraph;
+    //layout.reset_positions();
 
     graph = gen.generate(
             graph_p.n_vertices,
@@ -29,19 +51,49 @@ void genGraph() {
             graph_p.min_weight,
             graph_p.max_weight);
     std::cout << *graph << std::endl;
-    layout.initialize_positions(*graph, params);
+
+    gpuGraph = new GPUGraph(*graph, graph_p);
 }
 
 void reshape(int w, int h) {
     params.width = w;
     params.height = h;
+
+    d_w = original_w - (w * 0.5); 
+    d_h = original_h - (h * 0.5);
+
     glViewport(0, 0, w, h);
-    glLoadIdentity();
-    glOrtho(0, w, h, 0, -1, 1);
+    glfwSetWindowSize(window, w, h);
 
-    glutPostRedisplay();
+    if (gpuGraph) {
+        gpuGraph->screenWidth = w;
+        gpuGraph->screenHeight = h;
+    }
+}
 
-    layout.initialize_positions(*graph, params);
+void keyboard_input(GLFWwindow *win, int key, int scancode, int action, int mods) {
+    if (key == GLFW_KEY_W && action == GLFW_REPEAT) {
+        view.y += MOVE_SENSITIVITY;
+    }
+    if (key == GLFW_KEY_S && action == GLFW_REPEAT) {
+        view.y -= MOVE_SENSITIVITY;
+    }
+    if (key == GLFW_KEY_A && action == GLFW_REPEAT) {
+        view.x -= MOVE_SENSITIVITY;
+    }
+    if (key == GLFW_KEY_D && action == GLFW_REPEAT) {
+        view.x += MOVE_SENSITIVITY;
+    }
+    if (key == GLFW_KEY_PAGE_UP && action == GLFW_PRESS) {
+        view.zoom += ZOOM_SENSITIVITY;
+    }
+    if (key == GLFW_KEY_PAGE_DOWN && action == GLFW_PRESS) {
+        view.zoom -= ZOOM_SENSITIVITY;
+    }
+
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+        exit(0);
+    }
 }
 
 void showMenu(ImGuiIO& io) {
@@ -69,41 +121,11 @@ void showMenu(ImGuiIO& io) {
     ImGui::End();
 }
 
-void drawGraph() {
-    layout.calculate(*graph, params);
-    const std::map<int, std::pair<float, float>>& positions = layout.get_positions();
-
-    // Draw edges
-    glColor3f(graph_p.edge_color.x, graph_p.edge_color.y, graph_p.edge_color.z);
-    glBegin(GL_TRIANGLES);
-    for(const auto& edge : graph->adjacency_list) {
-        int src = edge.first;
-        int dest = edge.second.end;
-        if(positions.count(src) && positions.count(dest)) {
-            glVertex2f(positions.at(src).first + 1, positions.at(src).second + 1);
-            glVertex2f(positions.at(dest).first - 1, positions.at(dest).second - 1);
-            glVertex2f(positions.at(src).first - 3, positions.at(src).second + 3);
-        }
-    }
-    glEnd();
-
-    // Draw vertices
-    glColor3f(graph_p.vertex_color.x, graph_p.vertex_color.y, graph_p.vertex_color.z);
-    glPointSize(6.0);
-    glBegin(GL_POINTS);
-    for(const auto& pos_entry : positions) {
-        const auto& pos = pos_entry.second;
-        glVertex2f(pos.first, pos.second);
-    }
-    glEnd();
-
-}
-
 void display() {
     glClear(GL_COLOR_BUFFER_BIT);
-    
+   
     ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGLUT_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     ImGuiIO& io = ImGui::GetIO();
 
@@ -111,42 +133,123 @@ void display() {
         reshape(io.DisplaySize.x, io.DisplaySize.y);
 
     showMenu(io);
-    drawGraph();
+
+    gpuGraph->simulate(0.016f);
+    glm::mat4 proj = glm::ortho((d_w + view.x) / view.zoom, ((float)params.width + view.x) / view.zoom, (d_h + view.y) / view.zoom, ((float)params.height + view.y) / view.zoom);
+
+    gpuGraph->render(proj);
 
     ImGui::Render();
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
 
-    glutSwapBuffers();
-    glutPostRedisplay();
 
+
+void glDebugOutput(GLenum source, 
+                            GLenum type, 
+                            unsigned int id, 
+                            GLenum severity, 
+                            GLsizei length, 
+                            const char *message, 
+                            const void *userParam)
+{
+    // ignore non-significant error/warning codes
+    if(id == 131169 || id == 131185 || id == 131218 || id == 131204) return; 
+
+    std::cout << "OpenGL Debug message (" << id << "): " <<  message << " | ";
+
+    switch (source)
+    {
+        case GL_DEBUG_SOURCE_API:             std::cout << "Source: API"; break;
+        case GL_DEBUG_SOURCE_WINDOW_SYSTEM:   std::cout << "Source: Window System"; break;
+        case GL_DEBUG_SOURCE_SHADER_COMPILER: std::cout << "Source: Shader Compiler"; break;
+        case GL_DEBUG_SOURCE_THIRD_PARTY:     std::cout << "Source: Third Party"; break;
+        case GL_DEBUG_SOURCE_APPLICATION:     std::cout << "Source: Application"; break;
+        case GL_DEBUG_SOURCE_OTHER:           std::cout << "Source: Other"; break;
+    } std::cout << " | ";
+
+    switch (type)
+    {
+        case GL_DEBUG_TYPE_ERROR:               std::cout << "Type: Error"; break;
+        case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR: std::cout << "Type: Deprecated Behaviour"; break;
+        case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:  std::cout << "Type: Undefined Behaviour"; break; 
+        case GL_DEBUG_TYPE_PORTABILITY:         std::cout << "Type: Portability"; break;
+        case GL_DEBUG_TYPE_PERFORMANCE:         std::cout << "Type: Performance"; break;
+        case GL_DEBUG_TYPE_MARKER:              std::cout << "Type: Marker"; break;
+        case GL_DEBUG_TYPE_PUSH_GROUP:          std::cout << "Type: Push Group"; break;
+        case GL_DEBUG_TYPE_POP_GROUP:           std::cout << "Type: Pop Group"; break;
+        case GL_DEBUG_TYPE_OTHER:               std::cout << "Type: Other"; break;
+    } std::cout << " | ";
+    
+    switch (severity)
+    {
+        case GL_DEBUG_SEVERITY_HIGH:         std::cout << "Severity: high"; break;
+        case GL_DEBUG_SEVERITY_MEDIUM:       std::cout << "Severity: medium"; break;
+        case GL_DEBUG_SEVERITY_LOW:          std::cout << "Severity: low"; break;
+        case GL_DEBUG_SEVERITY_NOTIFICATION: std::cout << "Severity: notification"; break;
+    } std::cout << std::endl;
 }
 
 int main(int argc, char** argv) {
+    glewExperimental = GL_TRUE;
+    if (!glfwInit())
+        exit(EXIT_FAILURE);
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+
+    window = glfwCreateWindow(params.width, params.height, "Graph Generator", NULL, NULL);
+    glfwMakeContextCurrent(window);
+    glewInit();
+    if (!window)
+    {
+        std::cerr << "Unable to create GLFW window" << std::endl;
+        glfwTerminate();
+        exit(EXIT_FAILURE);
+    }
+
+    glfwSetKeyCallback(window, keyboard_input);
+
+    glPointSize(6);
+
+    int flags; 
+    glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+    /*if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
+    {
+        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); 
+        glDebugMessageCallback(glDebugOutput, nullptr);
+        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+    }*/
+
     genGraph();
 
-    glutInit(&argc, argv);
-    glutInitWindowSize(params.width, params.height);
-    glutCreateWindow("Graph Data Generator");
-    glOrtho(0, params.width, params.height, 0, -1, 1);
-
-    glutDisplayFunc(display);
-    glutReshapeFunc(reshape);
+    glfwSwapInterval(1);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    ImGui_ImplGLUT_Init();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init();
-    ImGui_ImplGLUT_InstallFuncs();
-   
-    glutMainLoop();
+ 
+    while (!glfwWindowShouldClose(window)) {
+        display();
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+        glFinish();
+    }
 
     ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGLUT_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+
+    glfwDestroyWindow(window);
+    glfwTerminate();
+
     return 0;
 }
 
