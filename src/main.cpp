@@ -26,13 +26,21 @@ float d_w;
 float d_h;
 
 struct View_t {
-    float x = 0;
-    float y = 0;
+    float x = -200;
+    float y = -100;
     float zoom = 1.0f;
 } view;
 
 int MOVE_SENSITIVITY = 10; // Determines camera panning speed
 float ZOOM_SENSITIVITY = 0.1f;
+float simSpeed = 0.016f;
+bool renderGraph = true;
+
+void resetView() {
+    view.x = -params.width/4;
+    view.y = -params.height/4;
+    view.zoom = 1.0;
+}
 
 void genGraph() {
     GraphGenerator<int> gen(std::time(nullptr), 5, 5);
@@ -61,6 +69,12 @@ void reshape(int w, int h) {
 
     d_w = original_w - (w * 0.5); 
     d_h = original_h - (h * 0.5);
+
+    int fourth_w = (int)(w / 4);
+    int fourth_h = (int)(h / 4);
+
+    view.x = -fourth_w;
+    view.y = -fourth_h;
 
     glViewport(0, 0, w, h);
     glfwSetWindowSize(window, w, h);
@@ -91,6 +105,14 @@ void keyboard_input(GLFWwindow *win, int key, int scancode, int action, int mods
         view.zoom -= ZOOM_SENSITIVITY;
     }
 
+    if (key == GLFW_KEY_G && action == GLFW_PRESS) {
+        genGraph();
+    }
+
+    if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+        resetView();
+    }
+
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         exit(0);
     }
@@ -111,13 +133,22 @@ void showMenu(ImGuiIO& io) {
     ImGui::InputInt("Min Weight", &graph_p.min_weight);
     ImGui::InputInt("Max Weight", &graph_p.max_weight);
 
-
     ImGui::ColorEdit3("Vertex Color", (float*)&graph_p.vertex_color);
     ImGui::ColorEdit3("Edge Color", (float*)&graph_p.edge_color);
+    ImGui::InputFloat("Simulation Speed", &simSpeed);
 
-    if (ImGui::Button("Generate Graph"))                            
-        genGraph();
+    if (ImGui::Button("Generate Graph (G)")) genGraph();
+    if (ImGui::Button("Reset View (R)")) resetView();
+
+    ImGui::Checkbox("Render Graph", &renderGraph);
+
+    ImGui::TextWrapped("Use WASD to pan view, Page Up/Down to zoom");
+
     ImGui::TextWrapped("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+
+    if (ImGui::Button("Quit (Esc)"))
+        exit(0);
+
     ImGui::End();
 }
 
@@ -134,10 +165,12 @@ void display() {
 
     showMenu(io);
 
-    gpuGraph->simulate(0.016f);
-    glm::mat4 proj = glm::ortho((d_w + view.x) / view.zoom, ((float)params.width + view.x) / view.zoom, (d_h + view.y) / view.zoom, ((float)params.height + view.y) / view.zoom);
+    if (renderGraph) {
+        gpuGraph->simulate(simSpeed);
+        glm::mat4 proj = glm::ortho((d_w + view.x) / view.zoom, ((float)params.width + view.x) / view.zoom, (d_h + view.y) / view.zoom, ((float)params.height + view.y) / view.zoom);
 
-    gpuGraph->render(proj);
+        gpuGraph->render(proj);
+    }
 
     ImGui::Render();
 
