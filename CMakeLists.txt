@@ -2,13 +2,14 @@ cmake_minimum_required(VERSION 3.15)
 project(graph_display LANGUAGES CXX)
 
 # Set C++ standard and compiler flags
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -g")
 
 # Find required packages
 find_package(OpenGL REQUIRED)
-find_package(GLUT REQUIRED)
+find_package(GLEW REQUIRED)
+find_package(glfw3 REQUIRED)
 
 # Fetch ImGui from GitHub
 include(FetchContent)
@@ -22,6 +23,10 @@ FetchContent_MakeAvailable(imgui)
 # Project source files
 set(SOURCES
     src/main.cpp
+    src/renderer.hpp
+    src/renderer.cpp
+    src/shader_util.hpp
+    src/shader_util.cpp
     src/graph.hpp
     src/graph_generator.hpp
     src/force_directed_layout.hpp
@@ -43,15 +48,15 @@ target_sources(${PROJECT_NAME} PRIVATE
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_glut.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
     OpenGL::GL
-    GLUT::GLUT
-    GLU
+    GLEW::GLEW
+    glfw
 )
 
 # Set output directory
