@@ -4,6 +4,7 @@
 #include <imgui_stdlib.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <cstdlib>
 #include "graph.hpp"
 #include "graph_generator.hpp"
 #include "force_directed_layout.hpp"
@@ -24,6 +25,13 @@ int original_w = params.width;
 int original_h = params.height;
 float d_w;
 float d_h;
+
+struct View_t {
+    float x = 0;
+    float y = 0;
+} view;
+
+int MOVE_SENSITIVITY = 10; // Determines camera panning speed
 
 void genGraph() {
     GraphGenerator<int> gen(std::time(nullptr), 5, 5);
@@ -59,6 +67,24 @@ void reshape(int w, int h) {
     if (gpuGraph) {
         gpuGraph->screenWidth = w;
         gpuGraph->screenHeight = h;
+    }
+}
+
+void keyboard_input(GLFWwindow *win, int key, int scancode, int action, int mods) {
+    if (key == GLFW_KEY_W && action == GLFW_REPEAT) {
+        view.y += MOVE_SENSITIVITY;
+    }
+    if (key == GLFW_KEY_S && action == GLFW_REPEAT) {
+        view.y -= MOVE_SENSITIVITY;
+    }
+    if (key == GLFW_KEY_A && action == GLFW_REPEAT) {
+        view.x -= MOVE_SENSITIVITY;
+    }
+    if (key == GLFW_KEY_D && action == GLFW_REPEAT) {
+        view.x += MOVE_SENSITIVITY;
+    }
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+        exit(0);
     }
 }
 
@@ -101,7 +127,7 @@ void display() {
     showMenu(io);
 
     gpuGraph->simulate(0.016f);
-    glm::mat4 proj = glm::ortho(d_w, (float)params.width, d_h, (float)params.height);
+    glm::mat4 proj = glm::ortho(d_w + view.x, (float)params.width + view.x, d_h + view.y, (float)params.height + view.y);
 
     gpuGraph->render(proj);
 
@@ -175,6 +201,8 @@ int main(int argc, char** argv) {
         glfwTerminate();
         exit(EXIT_FAILURE);
     }
+
+    glfwSetKeyCallback(window, keyboard_input);
 
     int flags; 
     glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
