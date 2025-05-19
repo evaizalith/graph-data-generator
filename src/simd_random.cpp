@@ -1,5 +1,5 @@
 #include "simd_random.hpp"
-#include <iostream>
+#include <thread>
 
 CachedPhiloxAVX2::CachedPhiloxAVX2(uint64_t seed) {
     // Split seed into two parts and initialize keys
@@ -12,22 +12,25 @@ CachedPhiloxAVX2::CachedPhiloxAVX2(uint64_t seed) {
     counter = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
     cursor = 0;
 
-    generateTable();
+    std::thread thread(generateTable, std::ref(counter), std::ref(keys[0]), std::ref(keys[1]), std::ref(cache), cache_size);
+    thread.join();
 }
 
 uint32_t CachedPhiloxAVX2::operator()() {
     if (cursor >= cache_size - 1) { 
         cursor = 0;
-        generateTable();
+        std::thread thread(generateTable, std::ref(counter), std::ref(keys[0]), std::ref(keys[1]), std::ref(cache), cache_size);
+        thread.detach();
     }
     return cache[cursor++];
 }
 
-__m256i CachedPhiloxAVX2::generate() {
-    __m256i state = counter;
-    __m256i key_low = keys[0];
-    __m256i key_high = keys[1];
+uint32_t CachedPhiloxAVX2::operator()(int max) {
+    return this->operator()() % max;
+}
 
+__m256i CachedPhiloxAVX2::generate(__m256i& counter, __m256i& key_low, __m256i& key_high, int rounds) {
+    __m256i state = counter;
     #ifdef Intel
     for (int i = 0; i < rounds; i++) {
         __m256i mul  = _mm256_mullo_epi32(state, _mm256_set1_epi32(multiplier));
@@ -84,13 +87,13 @@ __m256i CachedPhiloxAVX2::generate() {
     return state;
 }
 
-void CachedPhiloxAVX2::generateTable() {
+void CachedPhiloxAVX2::generateTable(__m256i& counter, __m256i& key_low, __m256i& key_high, std::array<std::atomic<uint32_t>, 8192>& cache, const int cache_size) {
     const int NUMBERS_PER_ITERATION = 8;
     const int ITERATIONS = cache_size / NUMBERS_PER_ITERATION;
     //static_assert(cache_size % NUMBERS_PER_ITERATION == 0, "CachedPhiloxAVX2::generateTable(): cache size must be neatly divisible by the number of items per vector"); 
 
     for (int i = 0; i < ITERATIONS; ++i) {
-        __m256i rand_values = generate();
+        __m256i rand_values = generate(std::ref(counter), std::ref(key_low), std::ref(key_high), 10);
         _mm256_storeu_si256(reinterpret_cast<__m256i*>(cache.data() + i * 8), rand_values);
     }
 }
