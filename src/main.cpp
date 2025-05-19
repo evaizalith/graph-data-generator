@@ -58,8 +58,6 @@ void genGraph() {
             graph_p.max_degree,
             graph_p.min_weight,
             graph_p.max_weight);
-    std::cout << *graph << std::endl;
-
     gpuGraph = new GPUGraph(*graph, graph_p);
 }
 
@@ -113,6 +111,10 @@ void keyboard_input(GLFWwindow *win, int key, int scancode, int action, int mods
         resetView();
     }
 
+    if (key == GLFW_KEY_P && action == GLFW_PRESS) {
+        std::cout << *graph << std::endl;
+    }
+
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         exit(0);
     }
@@ -138,6 +140,7 @@ void showMenu(ImGuiIO& io) {
     ImGui::InputFloat("Simulation Speed", &simSpeed);
 
     if (ImGui::Button("Generate Graph (G)")) genGraph();
+    if (ImGui::Button("Print Graph (P)")) std::cout << *graph << std::endl;
     if (ImGui::Button("Reset View (R)")) resetView();
 
     ImGui::Checkbox("Render Graph", &renderGraph);

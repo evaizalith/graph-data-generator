@@ -4,7 +4,7 @@ project(graph_display LANGUAGES CXX)
 # Set C++ standard and compiler flags
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -g -march=native -fPIE")
 
 # Find required packages
 find_package(OpenGL REQUIRED)
@@ -30,6 +30,8 @@ set(SOURCES
     src/graph.hpp
     src/graph_generator.hpp
     src/force_directed_layout.hpp
+    src/simd_random.hpp
+    src/simd_random.cpp
 )
 
 # Create executable
