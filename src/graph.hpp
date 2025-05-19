@@ -12,7 +12,7 @@
 // Max keyword count should equal 2^N - 1 where N is some integer to ensure that the Vertex struct is packed properly for memory purposes
 #define MAX_KEYWORD_COUNT 15
 
-// Basic graph parameter class with some default values
+//! Basic graph parameter class with some default values
 struct GraphParameters {
     int n_vertices = 30;
     int n_keywords = 10;
@@ -26,7 +26,7 @@ struct GraphParameters {
     ImVec4 edge_color = ImVec4(0.0f, 1.0f, 0.0f, 1.00f);
 };
 
-// We make use of templates for the Vertex struct and the SparseGraph class primarily so that the user may select the most memory efficient data type. If you don't need more than 256 unique vertices, you don't need more than a uint8_t, otherwise you might need a uint16_t or a uint32_t, etc.
+//! We make use of templates for the Vertex struct and the SparseGraph class primarily so that the user may select the most memory efficient data type. If you don't need more than 256 unique vertices, you don't need more than a uint8_t, otherwise you might need a uint16_t or a uint32_t, etc.
 template <typename T>
 struct Vertex {
     T id;
@@ -39,7 +39,7 @@ struct Edge {
     T weight;
 };
 
-// As long as |E| < |V| / 2, this data structure is the most efficient way to store graph data (especially for digraphs), making use of an adjacency list. 
+//! As long as |E| < |V| / 2, this data structure is the most efficient way to store graph data (especially for digraphs), making use of an adjacency list. 
 template <typename T>
 class SparseGraph {
 public:
@@ -47,7 +47,7 @@ public:
     SparseGraph(const SparseGraph<T>&);
     ~SparseGraph();
 
-    Vertex<T>*      operator[](T);
+    Vertex<T>*      operator[](T);                                 //!< Get vertex by id
 
     void            add_vertex(Vertex<T>*);
     void            add_vertex(T id);
@@ -56,16 +56,11 @@ public:
     void            add_keyword(Vertex<T>*, T word);
     void            add_keyword(T id, T word);
 
-    
-    // Deletes memory associated with vertices
-    void            remove_vertex(Vertex<T>*);
+    void            remove_vertex(Vertex<T>*);                     //!< Deletes memory associated with vertices
     void            remove_vertex(T id);
-    // Remove edges
-    void            remove_edge(Vertex<T>* start, Vertex<T>* end);
-    void            remove_edge(T start, T end);
-    
-    // Get all vertices connected by an edge
-    std::vector<Edge<T>>  get_adjacent(Vertex<T>*);
+    void            remove_edge(Vertex<T>* start, Vertex<T>* end); //!< Remove edge between two vertices 
+    void            remove_edge(T start, T end);                   
+    std::vector<Edge<T>>  get_adjacent(Vertex<T>*);                //!< Get all vertices connected by an edge
     std::vector<Edge<T>>  get_adjacent(T id);
 
     bool            vertex_exists(T id);
@@ -75,7 +70,7 @@ public:
     T                                                   n_vertices;
     std::vector<Vertex<T>*, std::allocator<Vertex<T>*>> vertices;
     std::multimap<T, Edge<T>>                           adjacency_list; 
-    std::multimap<T, T>                                 reverse_index;  // Stores a list of every vertex with a given keyword 
+    std::multimap<T, T>                                 reverse_index;  //!< Stores a list of every vertex with a given keyword 
 };
 
 template <typename T>
