@@ -8,6 +8,8 @@
 #include <memory>
 #include <stdexcept>
 #include <imgui.h>
+#include <queue> 
+#include <new>
 
 // Max keyword count should equal 2^N - 1 where N is some integer to ensure that the Vertex struct is packed properly for memory purposes
 #define MAX_KEYWORD_COUNT 15
@@ -28,13 +30,12 @@ struct GraphParameters {
 
 //! We make use of templates for the Vertex struct and the SparseGraph class primarily so that the user may select the most memory efficient data type. If you don't need more than 256 unique vertices, you don't need more than a uint8_t, otherwise you might need a uint16_t or a uint32_t, etc.
 template <typename T>
-struct Vertex {
+struct alignas(sizeof(T)) Vertex {
     T id;
-    std::set<T> keywords;
 };
 
 template <typename T>
-struct Edge {
+struct alignas(2 * sizeof(T)) Edge {
     T end;
     T weight;
 };
@@ -70,7 +71,8 @@ public:
     T                                                   n_vertices;
     std::vector<Vertex<T>*, std::allocator<Vertex<T>*>> vertices;
     std::multimap<T, Edge<T>>                           adjacency_list; 
-    std::multimap<T, T>                                 reverse_index;  //!< Stores a list of every vertex with a given keyword 
+    std::multimap<T, T>                                 reverse_index;  //!< Stores a list of every vertex with a given keyword
+    std::queue<T>                                       keyword_add_queue;
 };
 
 template <typename T>
@@ -120,8 +122,6 @@ void SparseGraph<T>::add_vertex(T id) {
 
 template <typename T>
 void SparseGraph<T>::add_keyword(Vertex<T>* vert, T word) {
-    vert->keywords.insert(word);
-   
     // Check for duplicates in reverse_index, return early if found
     auto range = reverse_index.equal_range(word);
     for (auto it = range.first; it != range.second; ++it) {
@@ -229,9 +229,9 @@ std::ostream& operator<<(std::ostream& os, SparseGraph<T>& graph) {
                 os << "(" << adj.end << ", " << adj.weight << ")" << " ";
             }
             os << ">" << ", keywords: ";
-            for (const auto& word : vert->keywords) {
-                os << word << " ";
-            }
+            //for (const auto& word : vert->keywords) {
+            //    os << word << " ";
+            //}
             os << ");" << std::endl;
         }
 
