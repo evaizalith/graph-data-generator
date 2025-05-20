@@ -63,6 +63,8 @@ SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_ke
 
     graph->process_keyword_additions();
 
+    std::cout << "Graph generated" << std::endl;
+
     return graph;
 }
 
