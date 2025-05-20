@@ -15,6 +15,7 @@ cd graph-data-generator
 
 ### Requirements
 - CMake
-- GLUT
+- GLFW
+- GLEW
 - OpenGL
 - ImGui
