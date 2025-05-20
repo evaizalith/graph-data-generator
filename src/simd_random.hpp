@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <array>
 #include <atomic>
+#include <new> 
 
 const uint32_t multiplier = 0x9E377B9B9;
 
@@ -25,7 +26,7 @@ private:
     __m256i counter;
     const int rounds = 10;
     const int cache_size = 8192; 
-    std::array<std::atomic<uint32_t>, 8192> cache;
+    alignas(std::hardware_destructive_interference_size) std::array<std::atomic<uint32_t>, 8192> cache;
     int cursor; 
 
     __m256i static generate(__m256i& counter, __m256i& key_low, __m256i& key_high, int rounds);                //!< Generates 1 256-bit random number (8 32-bit numbers). This function is compiled differently depending on whether the CPU is Intel or AMD because it makes use of SIMD instructions, and the exact AVX2 instructions change between those two vendors
