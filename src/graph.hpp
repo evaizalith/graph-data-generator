@@ -8,6 +8,8 @@
 #include <memory>
 #include <stdexcept>
 #include <imgui.h>
+#include <queue> 
+#include <new>
 
 // Max keyword count should equal 2^N - 1 where N is some integer to ensure that the Vertex struct is packed properly for memory purposes
 #define MAX_KEYWORD_COUNT 15
@@ -28,18 +30,26 @@ struct GraphParameters {
 
 //! We make use of templates for the Vertex struct and the SparseGraph class primarily so that the user may select the most memory efficient data type. If you don't need more than 256 unique vertices, you don't need more than a uint8_t, otherwise you might need a uint16_t or a uint32_t, etc.
 template <typename T>
-struct Vertex {
+struct alignas(sizeof(T)) Vertex {
     T id;
-    std::set<T> keywords;
 };
 
 template <typename T>
-struct Edge {
+struct alignas(2 * sizeof(T)) Edge {
     T end;
     T weight;
 };
 
-//! As long as |E| < |V| / 2, this data structure is the most efficient way to store graph data (especially for digraphs), making use of an adjacency list. 
+template <typename T>
+struct alignas(2 * sizeof(T)) KeywordPair {
+    T vert;
+    T keyword;
+};
+
+/*! As long as |E| < |V| / 2, this data structure is the most efficient way to store graph data (especially for digraphs), making use of an adjacency list. 
+ *This data structure has been implemented to best make use of the CPU's cache, sometimes at the
+ *expense of usability, such that it's extremely efficient. 
+ */
 template <typename T>
 class SparseGraph {
 public:
@@ -53,8 +63,9 @@ public:
     void            add_vertex(T id);
     void            add_edge(Vertex<T>* start, Vertex<T>* end, T weight);
     void            add_edge(T start, T end, T weight);
-    void            add_keyword(Vertex<T>*, T word);
+    void            add_keyword(Vertex<T>*, T word);               //!< Adds keywords to a queue to be added to the graph
     void            add_keyword(T id, T word);
+    void            process_keyword_additions();                   //!< Register keyword additions
 
     void            remove_vertex(Vertex<T>*);                     //!< Deletes memory associated with vertices
     void            remove_vertex(T id);
@@ -62,6 +73,7 @@ public:
     void            remove_edge(T start, T end);                   
     std::vector<Edge<T>>  get_adjacent(Vertex<T>*);                //!< Get all vertices connected by an edge
     std::vector<Edge<T>>  get_adjacent(T id);
+    std::vector<T>        get_keywords(T id);
 
     bool            vertex_exists(T id);
 
@@ -69,8 +81,10 @@ public:
 
     T                                                   n_vertices;
     std::vector<Vertex<T>*, std::allocator<Vertex<T>*>> vertices;
-    std::multimap<T, Edge<T>>                           adjacency_list; 
-    std::multimap<T, T>                                 reverse_index;  //!< Stores a list of every vertex with a given keyword 
+    std::multimap<T, Edge<T>>                           adjacency_list;
+    std::multimap<T, T>                                 keyword_index;
+    std::multimap<T, T>                                 reverse_index;  //!< Stores a list of every vertex with a given keyword
+    std::queue<KeywordPair<T>>                          keyword_add_queue;
 };
 
 template <typename T>
@@ -120,22 +134,34 @@ void SparseGraph<T>::add_vertex(T id) {
 
 template <typename T>
 void SparseGraph<T>::add_keyword(Vertex<T>* vert, T word) {
-    vert->keywords.insert(word);
-   
     // Check for duplicates in reverse_index, return early if found
-    auto range = reverse_index.equal_range(word);
-    for (auto it = range.first; it != range.second; ++it) {
-        if (it->second == vert->id) {
-            return;
-        }
-    }
-
-    reverse_index.insert({word, vert->id});
+    KeywordPair<T> pair = {vert->id, word};
+    keyword_add_queue.push(pair);
 }
 
 template <typename T>
 void SparseGraph<T>::add_keyword(T id, T word) {
     add_keyword(&vertices[id], word);
+}
+
+template <typename T>
+void SparseGraph<T>::process_keyword_additions() {
+    T i = 0;
+    while (!keyword_add_queue.empty()) {
+        KeywordPair<T> pair = keyword_add_queue.front();
+        keyword_add_queue.pop();
+        auto range = reverse_index.equal_range(pair.keyword);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second == pair.vert) {
+                continue;
+            }
+        }
+
+        keyword_index.insert({pair.vert, pair.keyword});
+        reverse_index.insert({pair.keyword, pair.vert});
+
+        ++i;
+    }
 }
 
 template <typename T>
@@ -213,6 +239,16 @@ std::vector<Edge<T>>  SparseGraph<T>::get_adjacent(T id) {
 }
 
 template <typename T>
+std::vector<T> SparseGraph<T>::get_keywords(T id) {
+    std::vector<T> result;
+    auto range = keyword_index.equal_range(id);
+    for (auto it = range.first; it != range.second; ++it) {
+        result.push_back(it->second);
+    }
+    return result;
+}
+
+template <typename T>
 bool SparseGraph<T>::vertex_exists(T id) {
     try {
         return vertices.at(id) != NULL;
@@ -229,7 +265,8 @@ std::ostream& operator<<(std::ostream& os, SparseGraph<T>& graph) {
                 os << "(" << adj.end << ", " << adj.weight << ")" << " ";
             }
             os << ">" << ", keywords: ";
-            for (const auto& word : vert->keywords) {
+            std::vector<T> keywords = graph.get_keywords(vert->id);
+            for (const auto& word : keywords) {
                 os << word << " ";
             }
             os << ");" << std::endl;

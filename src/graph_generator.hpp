@@ -51,10 +51,7 @@ SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_ke
         for (T j = 0; j < vert_n_keywords; ++j) {
             graph->add_keyword(vert, distribution(0, n_keywords));
         }
-    }
 
-    // Generate edges
-    for (T i = 0; i < n_vertices; ++i) {
         T n_edges = distribution(min_degree, max_degree);
         
         for (T j = 0; j < n_edges; ++j) {
@@ -64,6 +61,10 @@ SparseGraph<T>* GraphGenerator<T>::generate(T n_vertices, T n_keywords, T min_ke
         }
     }
 
+    graph->process_keyword_additions();
+
+    std::cout << "Graph generated" << std::endl;
+
     return graph;
 }
 
@@ -71,7 +72,7 @@ template <typename T>
 T GraphGenerator<T>::distribution(T min, T max) {
     T val;
     do {
-        uint32_t result = (*gen)(max);
+        uint32_t result = (*gen)(max + 1);
         val = static_cast<T>(result);
     } while (val < min);
     return val;
