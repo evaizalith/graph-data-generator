@@ -76,6 +76,7 @@ public:
     std::vector<T>        get_keywords(T id);
 
     bool            vertex_exists(T id);
+    bool            keyword_is_in(T w, T v);
 
     template <class U>friend std::ostream& operator<<(std::ostream& os, SparseGraph<U>&);
 
@@ -162,6 +163,9 @@ void SparseGraph<T>::process_keyword_additions() {
 
         ++i;
     }
+
+    std::queue<KeywordPair<T>> emptyQueue;
+    keyword_add_queue.swap(emptyQueue);
 }
 
 template <typename T>
@@ -255,6 +259,18 @@ bool SparseGraph<T>::vertex_exists(T id) {
     } catch (const std::out_of_range& e) {
         return false;
     }
+}
+
+template <typename T>
+bool SparseGraph<T>::keyword_is_in(T w, T v) {
+    auto range = keyword_index.equal_range(v);
+    for (auto it = range.first; it != range.second; ++it) {
+        if (it->second == w) {
+            return true;
+        }
+    } 
+
+    return false;
 }
 
 template <class T>
