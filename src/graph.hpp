@@ -4,12 +4,12 @@
 #include <iostream>
 #include <map>
 #include <vector>
-#include <set>
 #include <memory>
 #include <stdexcept>
 #include <imgui.h>
 #include <queue> 
 #include <new>
+#include <memory>
 
 // Max keyword count should equal 2^N - 1 where N is some integer to ensure that the Vertex struct is packed properly for memory purposes
 #define MAX_KEYWORD_COUNT 15
@@ -38,6 +38,13 @@ template <typename T>
 struct alignas(2 * sizeof(T)) Edge {
     T end;
     T weight;
+};
+
+template <typename T>
+struct VerboseEdge {
+    T start;
+    T end;
+    T weight; 
 };
 
 template <typename T>
@@ -74,6 +81,8 @@ public:
     std::vector<Edge<T>>  get_adjacent(Vertex<T>*);                //!< Get all vertices connected by an edge
     std::vector<Edge<T>>  get_adjacent(T id);
     std::vector<T>        get_keywords(T id);
+
+    std::vector<VerboseEdge<T>> get_edge_list();                   //!< Produce a new adjacency list 
 
     bool            vertex_exists(T id);
     bool            keyword_is_in(T w, T v);
@@ -251,6 +260,22 @@ std::vector<T> SparseGraph<T>::get_keywords(T id) {
     }
     return result;
 }
+
+template <typename T>
+std::vector<VerboseEdge<T>> SparseGraph<T>::get_edge_list() {
+    std::vector<VerboseEdge<T>> list;
+
+    for (auto vert : vertices) {
+        auto range = adjacency_list.equal_range(vert->id);
+        for(auto it = range.first; it != range.second; ++it) {
+            VerboseEdge<T> edge = { vert->id, (*it).second.end, (*it).second.weight };
+            list.push_back(edge);
+        }
+    }
+
+    return list; 
+}
+
 
 template <typename T>
 bool SparseGraph<T>::vertex_exists(T id) {
