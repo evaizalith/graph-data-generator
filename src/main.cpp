@@ -37,6 +37,7 @@ int MOVE_SENSITIVITY = 10; // Determines camera panning speed
 float ZOOM_SENSITIVITY = 0.1f;
 float simSpeed = 0.016f;
 bool renderGraph = true;
+bool gpuComputation = true;
 
 void resetView() {
     view.x = -params.width/4;
@@ -46,7 +47,10 @@ void resetView() {
 
 void keyDistMatrix() {
     KeywordDistanceMatrix mat(graph_p.n_keywords, graph_p.n_vertices, graph_p.max_weight); 
-    mat.calculate_matrix_cpu(graph);
+    
+    if (gpuComputation) mat.calculate_matrix_gpu(graph);
+    else mat.calculate_matrix_cpu(graph);
+
     std::cout << "Finished calculating keyword-distance matrix" << std::endl;
 
     CSVWriter writer;
@@ -160,6 +164,7 @@ void showMenu(ImGuiIO& io) {
     if (ImGui::Button("Reset View (R)")) resetView();
 
     ImGui::Checkbox("Render Graph", &renderGraph);
+    ImGui::Checkbox("Use GPU to compute keyword-distance matrices", &gpuComputation);
 
     ImGui::TextWrapped("Use WASD to pan view, Page Up/Down to zoom");
 
