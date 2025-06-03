@@ -1,4 +1,5 @@
 #version 450
+layout(local_size_x = 256) in;
 
 struct Edge {
     int start;
@@ -12,23 +13,14 @@ uniform uint W;
 
 const uint BIG_NUMBER = 0x7FFFFFFF; // Safe maximum value
 
-layout(local_size_x = 1024) in;
-
-// Input buffers
 layout(std430, binding = 0) buffer EdgeList { Edge edges[]; };
 layout(std430, binding = 1) buffer HasKeyword { uint hasKeyword[]; };
-
-// Double-buffered distance and predecessor arrays
 layout(std430, binding = 2) buffer Dist0 { uint dist0[]; };
 layout(std430, binding = 3) buffer Dist1 { uint dist1[]; };
 layout(std430, binding = 4) buffer Pred0 { int pred0[]; };
 layout(std430, binding = 5) buffer Pred1 { int pred1[]; };
-
-// Output buffers
 layout(std430, binding = 6) buffer OutputDist { uint outputDist[]; };
 layout(std430, binding = 7) buffer OutputPred { int outputPred[]; };
-
-layout(std430, binding = 8) buffer DebugOutput { uint debug[]; };
 
 void prevent_optimization() {
     // This will force W to be included in the shader
@@ -38,22 +30,12 @@ void prevent_optimization() {
 }
 
 void main() {
-    uint w = gl_WorkGroupID.x;        // Keyword index
-    uint localID = gl_LocalInvocationID.x;
-    uint N = gl_WorkGroupSize.x;      // Threads per work group
+    uint w = gl_GlobalInvocationID.x;  // Keyword index in batch
+    if (w >= W) return;
 
     prevent_optimization();
 
-        // DEBUG: Write initial marker
-    if (localID == 0) {
-        debug[w] = 0xDEADBEEF;
-        // Write first edge weight for verification
-        debug[W + w] = edges[0].weight; 
-    }
-
-
-    // Initialize buffers for current keyword
-    for (uint v = localID; v < V; v += N) {
+    for (uint v = 0; v < V; v++) {
         uint idx = w * V + v;
         if (hasKeyword[idx] != 0) {
             dist0[idx] = 0;
@@ -69,48 +51,45 @@ void main() {
     }
 
     barrier();
-    memoryBarrier();
+    memoryBarrierBuffer();
 
     for (uint iter = 0; iter < V; iter++) {
-        uint currentBuf = iter % 2;   // 0: dist0/pred0, 1: dist1/pred1
-        uint nextBuf = 1 - currentBuf; // Next buffer to update
+        uint currentBuf = iter % 2;
+        uint nextBuf = 1 - currentBuf;
 
-        for (uint e = localID; e < E; e += N) {
-                    Edge edge = edges[e];
-                    uint u = uint(edge.start);
-                    uint v = uint(edge.end);
-                    uint weight = uint(edge.weight);
-                    uint idx_u = w * V + u;
+        for (uint e = 0; e < E; e++) {
+            Edge edge = edges[e];
+            uint u = uint(edge.start);
+            uint v = uint(edge.end);
+            uint weight = uint(edge.weight);
+            uint idx_u = w * V + u;
 
-                    // Read distance from current buffer
-                    uint dist_u = (currentBuf == 0) ? dist0[idx_u] : dist1[idx_u];
-                    if (dist_u == BIG_NUMBER) continue; // Skip unreachable
+            uint dist_u = (currentBuf == 0) ? dist0[idx_u] : dist1[idx_u];
+            if (dist_u == BIG_NUMBER) continue;
 
-                    uint candidate = dist_u + weight;
-                    if (candidate > BIG_NUMBER) continue; // Avoid overflow
+            uint candidate = dist_u + weight;
+            if (candidate > BIG_NUMBER) continue;
 
-                    // Update next buffer using atomicMin
-                    uint idx_v = w * V + v;
-                    if (nextBuf == 0) {
-                        uint oldDist = atomicMin(dist0[idx_v], candidate);
-                        if (candidate < oldDist) {
-                            pred0[idx_v] = int(edge.start);
-                        }
-                    } else {
-                        uint oldDist = atomicMin(dist1[idx_v], candidate);
-                        if (candidate < oldDist) {
-                            pred1[idx_v] = int(edge.start);
-                        }
-                    }
+            uint idx_v = w * V + v;
+            if (nextBuf == 0) {
+                uint oldDist = atomicMin(dist0[idx_v], candidate);
+                if (candidate < oldDist) {
+                    pred0[idx_v] = int(edge.start);
+                }
+            } else {
+                uint oldDist = atomicMin(dist1[idx_v], candidate);
+                if (candidate < oldDist) {
+                    pred1[idx_v] = int(edge.start);
+                }
+            }
         }
-
+        
         barrier();
-        memoryBarrier();
+        memoryBarrierBuffer();
     }
 
-    // Copy results to output buffers
-    uint resultBuf = V % 2; // Determine final buffer (0: dist0/pred0, 1: dist1/pred1)
-    for (uint v = localID; v < V; v += N) {
+    uint resultBuf = V % 2;
+    for (uint v = 0; v < V; v++) {
         uint idx = w * V + v;
         if (resultBuf == 0) {
             outputDist[idx] = dist0[idx];
@@ -119,10 +98,5 @@ void main() {
             outputDist[idx] = dist1[idx];
             outputPred[idx] = pred1[idx];
         }
-    }
-
-    // DEBUG: Write final distance
-    if (localID == 0) {
-        debug[2*W + w] = outputDist[w * V];
     }
 }

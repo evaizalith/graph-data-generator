@@ -4,6 +4,9 @@
 
 const int BIG_NUMBER = 0x7FFFFFFF;
 
+const int BATCH_SIZE = 100; // keywords to process per batch
+const int LOCAL_SIZE = 512; // threads per work group
+
 KeywordDistanceMatrix::KeywordDistanceMatrix(int n_W, int n_V, int max_weight) {
     W = n_W;
     V = n_V;
@@ -105,6 +108,7 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
         GLchar log[1024];
         glGetProgramInfoLog(computeProgram, sizeof(log), nullptr, log);
         std::cerr << "Program link failed:\n" << log << std::endl;
+        return;
     }
 
     std::vector<VerboseEdge<int>> edges = graph->get_edge_list();
@@ -117,92 +121,86 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
     // Create and bind buffers
     GLuint ssbos[10]; // EdgeList, HasKeyword, Dist0, Dist1, Pred0, Pred1, OutputDist, OutputPred
     glGenBuffers(10, ssbos);
-
-    // Buffer 0: Edge List
+    
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[0]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(VerboseEdge<int>) * E, edges.data(), GL_STATIC_DRAW);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, edges.size() * sizeof(VerboseEdge<int>), edges.data(), GL_STATIC_DRAW);
 
-    std::vector<uint32_t> hasKeywordData(W * V, 0);
-    #pragma omp parallel for
-    for (int w = 0; w < W; w++) {
-        auto vertices = graph->get_vertices_with_keyword(w);
-        for (int v : vertices) {
-            hasKeywordData[w * V + v] = 1;
+    // Process in batches
+    for (int batchStart = 0; batchStart < W; batchStart += BATCH_SIZE) {
+        const int batchSize = std::min(BATCH_SIZE, W - batchStart);
+        std::cout << "Processing batch: " << batchStart << " to " 
+                  << (batchStart + batchSize - 1) << std::endl;
+
+        // Buffer 1: HasKeyword (batchSize × V)
+        std::vector<uint32_t> hasKeywordData(batchSize * V, 0);
+        for (int b = 0; b < batchSize; b++) {
+            int w = batchStart + b;
+            auto vertices = graph->get_vertices_with_keyword(w);
+            for (int v : vertices) {
+                hasKeywordData[b * V + v] = 1;
+            }
         }
-    }
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[1]);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, 
+                    hasKeywordData.size() * sizeof(uint32_t),
+                    hasKeywordData.data(), GL_DYNAMIC_DRAW);
 
-    // Buffer 1: HasKeyword (W*V matrix)
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[1]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(uint) * hasKeywordData.size(), hasKeywordData.data(), GL_STATIC_DRAW);
-
-    // Buffers 2-5: Double buffering (initialize to max distance)
-    GLsizeiptr matrixSize = W * V * sizeof(uint32_t);
-    for (int i = 2; i <= 5; i++) {
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[i]);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, matrixSize, nullptr, GL_DYNAMIC_DRAW);
-    }
-    
-    // Buffers 6-7: Output buffers
-    std::vector<uint32_t> initDist(W * V, 0xCCCCCCCC);
-    std::vector<int> initPred(W * V, -999);
-
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[6]);  // OutputDist
-    glBufferData(GL_SHADER_STORAGE_BUFFER, matrixSize, initDist.data(), GL_DYNAMIC_COPY);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[7]);  // OutputPred
-    glBufferData(GL_SHADER_STORAGE_BUFFER, W * V * sizeof(int), initPred.data(), GL_DYNAMIC_COPY);
-
-    
-    // Buffer 8-9: Debug buffers
-    std::vector<uint32_t> debugData(3 * W, 0);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[8]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, 3 * W * sizeof(uint32_t), 
-                debugData.data(), GL_DYNAMIC_COPY);
-
-    for (int i = 0; i < 9; i++) {
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, ssbos[i]);
-    }
-
-    glUseProgram(computeProgram);
-
-    setUniforms(computeProgram, V, E, W);
-
-    // Dispatch compute shader
-    std::cout << "Dispatching " << W << " working groups" << std::endl;
-    glDispatchCompute(W, 1, 1); // One work group per keyword
-    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-    // Read debug buffer
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[8]);
-    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, 
-                      3 * W * sizeof(uint32_t), debugData.data());
-    
-    std::cout << "\nDebug Output:\n";
-    for (int w = 0; w < W; w++) {
-        std::cout << "Keyword " << w << ": "
-                  << "Init=" << std::hex << debugData[w] << ", "
-                  << "EdgeWeight=" << debugData[W + w] << ", "
-                  << "FinalDist=" << debugData[2*W + w] << std::dec << "\n";
-    }
-
-    // Retrieve results from OutputDist/OutputPred
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[6]);
-    uint* distResults = (uint*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[7]);
-    int* predResults = (int*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-
-    // Copy data to matrix
-    for (int w = 0; w < W; ++w) {
-        for (int v = 0; v < V; ++v) {
-            const int index = w * V + v;
-            matrix[w][v].pred = (int)predResults[index];
-            matrix[w][v].dist = (int)distResults[index];
+        // Buffers 2-7: Batch-sized buffers
+        const GLsizeiptr batchMatrixSize = batchSize * V * sizeof(uint32_t);
+        std::vector<uint32_t> initDist(batchSize * V, 0x7FFFFFFF);
+        std::vector<int> initPred(batchSize * V, -1);
+        
+        for (int i = 2; i <= 5; i++) {
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[i]);
+            glBufferData(GL_SHADER_STORAGE_BUFFER, batchMatrixSize, 
+                        initDist.data(), GL_DYNAMIC_DRAW);
         }
-    }
+        
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[6]);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, batchMatrixSize, 
+                    initDist.data(), GL_DYNAMIC_COPY);
+        
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[7]);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, batchSize * V * sizeof(int), 
+                    initPred.data(), GL_DYNAMIC_COPY);
 
-    // Unmap buffers
-    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+        // Bind all buffers
+        for (int i = 0; i < 8; i++) {
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, ssbos[i]);
+        }
+
+        // Set uniforms
+        glUseProgram(computeProgram);
+        glUniform1ui(glGetUniformLocation(computeProgram, "V"), V);
+        glUniform1ui(glGetUniformLocation(computeProgram, "E"), E);
+        glUniform1ui(glGetUniformLocation(computeProgram, "W"), batchSize);
+
+        // Dispatch compute shader
+        GLuint workGroupsX = (batchSize + LOCAL_SIZE - 1) / LOCAL_SIZE;
+        glDispatchCompute(workGroupsX, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+        // Read results for this batch
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[6]);
+        uint32_t* distData = (uint32_t*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+        
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[7]);
+        int* predData = (int*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+
+        for (int b = 0; b < batchSize; b++) {
+            int w = batchStart + b;
+            for (int v = 0; v < V; v++) {
+                matrix[w][v].dist = distData[b * V + v];
+                matrix[w][v].pred = predData[b * V + v];
+            }
+        }
+
+        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+        std::cout << "Completed batch: " << batchStart << " to "
+                  << (batchStart + batchSize - 1) << std::endl;
+    }
 
     glDeleteBuffers(10, ssbos);
     glDeleteProgram(computeProgram);
+
 }
