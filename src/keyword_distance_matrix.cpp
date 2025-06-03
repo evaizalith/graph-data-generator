@@ -28,6 +28,11 @@ Pair* KeywordDistanceMatrix::operator()(int w, int v) {
     return &matrix[w][v];
 }
 
+Pair KeywordDistanceMatrix::get_size() {
+    Pair p = {W, V};
+    return p;
+}
+
 void KeywordDistanceMatrix::calculate_matrix_cpu(SparseGraph<int>* graph) {
     std::vector<VerboseEdge<int>> list = graph->get_edge_list();
 

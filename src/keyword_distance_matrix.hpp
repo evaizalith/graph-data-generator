@@ -23,6 +23,8 @@ public:
     void calculate_matrix_cpu(SparseGraph<int>* graph);
     void calculate_matrix_gpu(SparseGraph<int>* graph);
 
+    Pair get_size();
+
 private:
     Pair** matrix;      //!< WxV matrix
     int W;              //!< Number of keywords
