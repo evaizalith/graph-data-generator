@@ -1,7 +1,8 @@
 #include "keyword_distance_matrix.hpp"
-#include <climits>
 #include <omp.h>
 #include <iostream>
+
+const int BIG_NUMBER = 0x7FFFFFFF;
 
 KeywordDistanceMatrix::KeywordDistanceMatrix(int n_W, int n_V, int max_weight) {
     W = n_W;
@@ -43,7 +44,7 @@ void KeywordDistanceMatrix::calculate_matrix_cpu(SparseGraph<int>* graph) {
             int pred[V];
 
             for (int v = 0; v < V; v++) {
-                dist[v] = INT_MAX - MAX_WEIGHT;
+                dist[v] = BIG_NUMBER;
                 pred[v] = -1;
 
                 if (graph->keyword_is_in(w, v)) {
@@ -73,6 +74,24 @@ void KeywordDistanceMatrix::calculate_matrix_cpu(SparseGraph<int>* graph) {
     }
 }
 
+void setUniforms(GLuint computeProgram, int V, int E, int W) {
+    glUseProgram(computeProgram);
+
+    auto setUniformChecked = [&](const char* name, GLuint value) {
+        GLint loc = glGetUniformLocation(computeProgram, name);
+        if (loc != -1) {
+            glUniform1ui(loc, value);
+            std::cout << "Set uniform " << name << " = " << value << std::endl;
+        } else {
+            std::cerr << "Warning: Uniform " << name << " not found (may be optimized out)" << std::endl;
+        }
+    };
+
+    setUniformChecked("V", V);
+    setUniformChecked("E", E);
+    setUniformChecked("W", W);
+}
+
 void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
     GLuint computeProgram = createShaderProgram("keyword_matrix.comp");
     if (computeProgram == 0) {
@@ -88,7 +107,6 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
     }
 
     std::vector<uint32_t> hasKeywordData(W * V, 0);
-    // Efficiently fill using graph's keyword data
     #pragma omp parallel for
     for (int w = 0; w < W; w++) {
         auto vertices = graph->get_vertices_with_keyword(w);
@@ -109,19 +127,30 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[1]);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(uint) * W * V, hasKeywordData.data(), GL_STATIC_DRAW);
 
-    // Buffers 2-7: Initialize with appropriate sizes (W*V elements)
-    for (int i = 2; i < 8; i++) {
+    // Buffers 2-5: Double buffering (initialize to max distance)
+    GLsizeiptr matrixSize = W * V * sizeof(uint32_t);
+    for (int i = 2; i <= 5; i++) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[i]);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(uint) * W * V, nullptr, GL_DYNAMIC_DRAW);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, matrixSize, nullptr, GL_DYNAMIC_DRAW);
+        
+        // Initialize with max distance values
+        std::vector<uint32_t> initData(W * V, BIG_NUMBER);
+        if (i == 2 || i == 3) {  // Distance buffers
+            glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, matrixSize, initData.data());
+        }
     }
+    
+    // Buffers 6-7: Output buffers
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[6]);  // OutputDist
+    glBufferData(GL_SHADER_STORAGE_BUFFER, matrixSize, nullptr, GL_STREAM_READ);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[7]);  // OutputPred
+    glBufferData(GL_SHADER_STORAGE_BUFFER, W * V * sizeof(int), nullptr, GL_STREAM_READ);
 
-    // Set uniform values
-    glUniform1ui(glGetUniformLocation(computeProgram, "V"), V);
-    glUniform1ui(glGetUniformLocation(computeProgram, "E"), E);
-    glUniform1ui(glGetUniformLocation(computeProgram, "W"), W);
+    glUseProgram(computeProgram);
+
+    setUniforms(computeProgram, V, E, W);
 
     // Dispatch compute shader
-    glUseProgram(computeProgram);
     glDispatchCompute(W, 1, 1); // One work group per keyword
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 

@@ -25,9 +25,19 @@ layout(std430, binding = 7) buffer OutputPred { int outputPred[]; };
 uniform uint V; 
 uniform uint E; 
 uniform uint W;
-uniform uint BIG_NUMBER = 0x7FFFFFFF; // Safe maximum value
+
+const uint BIG_NUMBER = 0x7FFFFFFF; // Safe maximum value
+
+void prevent_optimization() {
+    // This will force W to be included in the shader
+    if (W == 0xDEADBEEF) {
+        outputDist[0] = W; // Never actually executes
+    }
+}
 
 void main() {
+    prevent_optimization();
+
     uint w = gl_WorkGroupID.x;        // Keyword index
     uint localID = gl_LocalInvocationID.x;
     uint N = gl_WorkGroupSize.x;      // Threads per work group
