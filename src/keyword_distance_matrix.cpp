@@ -99,12 +99,28 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
         return;
     }
 
+    GLint status;
+    glGetProgramiv(computeProgram, GL_LINK_STATUS, &status);
+    if (status != GL_TRUE) {
+        GLchar log[1024];
+        glGetProgramInfoLog(computeProgram, sizeof(log), nullptr, log);
+        std::cerr << "Program link failed:\n" << log << std::endl;
+    }
+
     std::vector<VerboseEdge<int>> edges = graph->get_edge_list();
     int E = edges.size();
     if (E == 0) {
         std::cerr << "No edges found for " << __func__ << std::endl;
         return;
     }
+
+    // Create and bind buffers
+    GLuint ssbos[10]; // EdgeList, HasKeyword, Dist0, Dist1, Pred0, Pred1, OutputDist, OutputPred
+    glGenBuffers(10, ssbos);
+
+    // Buffer 0: Edge List
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[0]);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(VerboseEdge<int>) * E, edges.data(), GL_STATIC_DRAW);
 
     std::vector<uint32_t> hasKeywordData(W * V, 0);
     #pragma omp parallel for
@@ -115,44 +131,58 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
         }
     }
 
-    // Create and bind buffers
-    GLuint ssbos[8]; // EdgeList, HasKeyword, Dist0, Dist1, Pred0, Pred1, OutputDist, OutputPred
-    glGenBuffers(8, ssbos);
-
-    // Buffer 0: Edge List
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[0]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(VerboseEdge<int>) * E, edges.data(), GL_STATIC_DRAW);
-
     // Buffer 1: HasKeyword (W*V matrix)
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[1]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(uint) * W * V, hasKeywordData.data(), GL_STATIC_DRAW);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(uint) * hasKeywordData.size(), hasKeywordData.data(), GL_STATIC_DRAW);
 
     // Buffers 2-5: Double buffering (initialize to max distance)
     GLsizeiptr matrixSize = W * V * sizeof(uint32_t);
     for (int i = 2; i <= 5; i++) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[i]);
         glBufferData(GL_SHADER_STORAGE_BUFFER, matrixSize, nullptr, GL_DYNAMIC_DRAW);
-        
-        // Initialize with max distance values
-        std::vector<uint32_t> initData(W * V, BIG_NUMBER);
-        if (i == 2 || i == 3) {  // Distance buffers
-            glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, matrixSize, initData.data());
-        }
     }
     
     // Buffers 6-7: Output buffers
+    std::vector<uint32_t> initDist(W * V, 0xCCCCCCCC);
+    std::vector<int> initPred(W * V, -999);
+
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[6]);  // OutputDist
-    glBufferData(GL_SHADER_STORAGE_BUFFER, matrixSize, nullptr, GL_STREAM_READ);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, matrixSize, initDist.data(), GL_DYNAMIC_COPY);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[7]);  // OutputPred
-    glBufferData(GL_SHADER_STORAGE_BUFFER, W * V * sizeof(int), nullptr, GL_STREAM_READ);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, W * V * sizeof(int), initPred.data(), GL_DYNAMIC_COPY);
+
+    
+    // Buffer 8-9: Debug buffers
+    std::vector<uint32_t> debugData(3 * W, 0);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[8]);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, 3 * W * sizeof(uint32_t), 
+                debugData.data(), GL_DYNAMIC_COPY);
+
+    for (int i = 0; i < 9; i++) {
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, ssbos[i]);
+    }
 
     glUseProgram(computeProgram);
 
     setUniforms(computeProgram, V, E, W);
 
     // Dispatch compute shader
+    std::cout << "Dispatching " << W << " working groups" << std::endl;
     glDispatchCompute(W, 1, 1); // One work group per keyword
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+    // Read debug buffer
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[8]);
+    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, 
+                      3 * W * sizeof(uint32_t), debugData.data());
+    
+    std::cout << "\nDebug Output:\n";
+    for (int w = 0; w < W; w++) {
+        std::cout << "Keyword " << w << ": "
+                  << "Init=" << std::hex << debugData[w] << ", "
+                  << "EdgeWeight=" << debugData[W + w] << ", "
+                  << "FinalDist=" << debugData[2*W + w] << std::dec << "\n";
+    }
 
     // Retrieve results from OutputDist/OutputPred
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[6]);
@@ -165,14 +195,14 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
     for (int w = 0; w < W; ++w) {
         for (int v = 0; v < V; ++v) {
             const int index = w * V + v;
-            matrix[w][v] = {
-                (int)predResults[index],
-                (int)distResults[index]
-            };
+            matrix[w][v].pred = (int)predResults[index];
+            matrix[w][v].dist = (int)distResults[index];
         }
     }
 
     // Unmap buffers
     glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+    glDeleteBuffers(10, ssbos);
+    glDeleteProgram(computeProgram);
 }
