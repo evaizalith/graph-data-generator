@@ -16,19 +16,20 @@ struct alignas(16) Pair {
 
 class KeywordDistanceMatrix {
 public:
-    KeywordDistanceMatrix(int W, int V); 
+    KeywordDistanceMatrix(int W, int V, int max_weight); 
     ~KeywordDistanceMatrix();
 
-    Pair* operator()(int w, int v); 
+    Pair operator()(int w, int v) const; 
     void calculate_matrix_cpu(SparseGraph<int>* graph);
     void calculate_matrix_gpu(SparseGraph<int>* graph);
 
-    Pair get_size();
+    Pair get_size() const;
 
 private:
     Pair** matrix;      //!< WxV matrix
     int W;              //!< Number of keywords
     int V;              //!< Number of vertices
+    int MAX_WEIGHT;
 };
 
 #endif 

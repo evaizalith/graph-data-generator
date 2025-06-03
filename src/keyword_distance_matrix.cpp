@@ -3,9 +3,10 @@
 #include <omp.h>
 #include <iostream>
 
-KeywordDistanceMatrix::KeywordDistanceMatrix(int n_W, int n_V) {
+KeywordDistanceMatrix::KeywordDistanceMatrix(int n_W, int n_V, int max_weight) {
     W = n_W;
     V = n_V;
+    MAX_WEIGHT = max_weight + 1;
     matrix = new Pair*[W];
     for (int i = 0; i < W; i++) {
         matrix[i] = new Pair[V];
@@ -22,13 +23,11 @@ KeywordDistanceMatrix::~KeywordDistanceMatrix() {
     }
 }
 
-Pair* KeywordDistanceMatrix::operator()(int w, int v) {
-    if (!matrix) return nullptr;
-
-    return &matrix[w][v];
+Pair KeywordDistanceMatrix::operator()(int w, int v) const {
+    return matrix[w][v];
 }
 
-Pair KeywordDistanceMatrix::get_size() {
+Pair KeywordDistanceMatrix::get_size() const {
     Pair p = {W, V};
     return p;
 }
@@ -40,11 +39,11 @@ void KeywordDistanceMatrix::calculate_matrix_cpu(SparseGraph<int>* graph) {
     {
         #pragma omp for
         for (int w = 0; w < W; w++) {
-            int dist[V];
+            unsigned dist[V];
             int pred[V];
 
             for (int v = 0; v < V; v++) {
-                dist[v] = INT_MAX;
+                dist[v] = INT_MAX - MAX_WEIGHT;
                 pred[v] = -1;
 
                 if (graph->keyword_is_in(w, v)) {
