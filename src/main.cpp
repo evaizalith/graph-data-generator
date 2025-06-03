@@ -9,6 +9,8 @@
 #include "graph_generator.hpp"
 #include "force_directed_layout.hpp"
 #include "renderer.hpp"
+#include "keyword_distance_matrix.hpp"
+#include "csv_writer.hpp"
 
 #define GLEW_STATIC
 
@@ -40,6 +42,15 @@ void resetView() {
     view.x = -params.width/4;
     view.y = -params.height/4;
     view.zoom = 1.0;
+}
+
+void keyDistMatrix() {
+    KeywordDistanceMatrix mat(graph_p.n_keywords, graph_p.n_vertices, graph_p.max_weight); 
+    mat.calculate_matrix_cpu(graph);
+    std::cout << "Finished calculating keyword-distance matrix" << std::endl;
+
+    CSVWriter writer;
+    writer.write("keyword_distance_matrix.csv", mat);
 }
 
 void genGraph() {
@@ -115,6 +126,10 @@ void keyboard_input(GLFWwindow *win, int key, int scancode, int action, int mods
         std::cout << *graph << std::endl;
     }
 
+    if (key == GLFW_KEY_M && action == GLFW_PRESS) {
+        keyDistMatrix(); 
+    }
+
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         exit(0);
     }
@@ -141,6 +156,7 @@ void showMenu(ImGuiIO& io) {
 
     if (ImGui::Button("Generate Graph (G)")) genGraph();
     if (ImGui::Button("Print Graph (P)")) std::cout << *graph << std::endl;
+    if (ImGui::Button("Calculate Keyword-Distance Matrix (M)")) keyDistMatrix(); 
     if (ImGui::Button("Reset View (R)")) resetView();
 
     ImGui::Checkbox("Render Graph", &renderGraph);
@@ -169,6 +185,7 @@ void display() {
     showMenu(io);
 
     if (renderGraph) {
+
         gpuGraph->simulate(simSpeed);
         glm::mat4 proj = glm::ortho((d_w + view.x) / view.zoom, ((float)params.width + view.x) / view.zoom, (d_h + view.y) / view.zoom, ((float)params.height + view.y) / view.zoom);
 
