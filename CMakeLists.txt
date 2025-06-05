@@ -36,6 +36,8 @@ set(SOURCES
     src/keyword_distance_matrix.hpp
     src/csv_writer.hpp
     src/csv_writer.cpp
+    src/percent_tracker.hpp
+    src/percent_tracker.cpp
 )
 
 # Create executable
