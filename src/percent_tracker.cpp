@@ -11,7 +11,7 @@ ProgressTracker::ProgressTracker(std::string p, std::string c, int m) {
 void ProgressTracker::begin() {
     current = 0;
     done = false;
-    std::cout << process << "starting... \n" << std::endl;
+    std::cout << process << " starting... \n" << std::endl;
 }
 
 void ProgressTracker::increment_and_print() {
