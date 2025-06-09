@@ -1,11 +1,12 @@
 #include "keyword_distance_matrix.hpp"
 #include <omp.h>
 #include <iostream>
+#include "percent_tracker.hpp"
 
 const int BIG_NUMBER = 0x7FFFFFFF;
 
-const int BATCH_SIZE = 100; // keywords to process per batch
-const int LOCAL_SIZE = 512; // threads per work group
+const int BATCH_SIZE = 50; // keywords to process per batch
+const int LOCAL_SIZE = 1024; // threads per work group
 
 KeywordDistanceMatrix::KeywordDistanceMatrix(int n_W, int n_V, int max_weight) {
     W = n_W;
@@ -27,7 +28,7 @@ KeywordDistanceMatrix::~KeywordDistanceMatrix() {
     }
 }
 
-Pair KeywordDistanceMatrix::operator()(int w, int v) const {
+Pair& KeywordDistanceMatrix::operator()(int w, int v) const {
     return matrix[w][v];
 }
 
@@ -119,17 +120,20 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
     }
 
     // Create and bind buffers
-    GLuint ssbos[10]; // EdgeList, HasKeyword, Dist0, Dist1, Pred0, Pred1, OutputDist, OutputPred
-    glGenBuffers(10, ssbos);
+    GLuint ssbos[8]; // EdgeList, HasKeyword, Dist0, Dist1, Pred0, Pred1, OutputDist, OutputPred
+    glGenBuffers(8, ssbos);
     
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[0]);
     glBufferData(GL_SHADER_STORAGE_BUFFER, edges.size() * sizeof(VerboseEdge<int>), edges.data(), GL_STATIC_DRAW);
 
+    const int dynamicBatchSize = (V > 1000) ? 1 : BATCH_SIZE;
+
+    ProgressTracker tracker("calculate_matrix_gpu", "All keywords processed.", W / dynamicBatchSize);
+    tracker.begin();
+
     // Process in batches
-    for (int batchStart = 0; batchStart < W; batchStart += BATCH_SIZE) {
-        const int batchSize = std::min(BATCH_SIZE, W - batchStart);
-        std::cout << "Processing batch: " << batchStart << " to " 
-                  << (batchStart + batchSize - 1) << std::endl;
+    for (int batchStart = 0; batchStart < W; batchStart += dynamicBatchSize) {
+        const int batchSize = std::min(dynamicBatchSize, W - batchStart);
 
         // Buffer 1: HasKeyword (batchSize × V)
         std::vector<uint32_t> hasKeywordData(batchSize * V, 0);
@@ -137,7 +141,8 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
             int w = batchStart + b;
             auto vertices = graph->get_vertices_with_keyword(w);
             for (int v : vertices) {
-                hasKeywordData[b * V + v] = 1;
+                if (v < V)
+                    hasKeywordData[b * V + v] = 1;
             }
         }
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[1]);
@@ -145,21 +150,30 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
                     hasKeywordData.size() * sizeof(uint32_t),
                     hasKeywordData.data(), GL_DYNAMIC_DRAW);
 
-        // Buffers 2-7: Batch-sized buffers
         const GLsizeiptr batchMatrixSize = batchSize * V * sizeof(uint32_t);
         std::vector<uint32_t> initDist(batchSize * V, 0x7FFFFFFF);
         std::vector<int> initPred(batchSize * V, -1);
         
-        for (int i = 2; i <= 5; i++) {
+        // Output pred buffers
+        for (int i = 2; i <= 3; i++) {
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[i]);
             glBufferData(GL_SHADER_STORAGE_BUFFER, batchMatrixSize, 
                         initDist.data(), GL_DYNAMIC_DRAW);
         }
+
+        // Input pred buffers
+        for (int i = 4; i <= 5; i++) {
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[i]);
+            glBufferData(GL_SHADER_STORAGE_BUFFER, batchMatrixSize, 
+                        initPred.data(), GL_DYNAMIC_DRAW);
+        }
         
+        // Output dist buffers
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[6]);
         glBufferData(GL_SHADER_STORAGE_BUFFER, batchMatrixSize, 
                     initDist.data(), GL_DYNAMIC_COPY);
         
+        // Output pred buffers
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[7]);
         glBufferData(GL_SHADER_STORAGE_BUFFER, batchSize * V * sizeof(int), 
                     initPred.data(), GL_DYNAMIC_COPY);
@@ -176,16 +190,31 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
         glUniform1ui(glGetUniformLocation(computeProgram, "W"), batchSize);
 
         // Dispatch compute shader
-        GLuint workGroupsX = (batchSize + LOCAL_SIZE - 1) / LOCAL_SIZE;
+        GLuint workGroupsX = (batchSize * V + LOCAL_SIZE - 1) / LOCAL_SIZE;
         glDispatchCompute(workGroupsX, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        glFinish();
 
         // Read results for this batch
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[6]);
         uint32_t* distData = (uint32_t*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-        
+       
+        if (!distData) {
+            std::cerr << "ERROR: Failed to map distance buffer in " << __func__ << std::endl;
+            glDeleteBuffers(8, ssbos);
+            glDeleteProgram(computeProgram);
+            return;
+        }
+
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[7]);
         int* predData = (int*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+
+        if (!predData) {
+            std::cerr << "ERROR: Failed to map pred buffer in " << __func__ << std::endl;
+            glDeleteBuffers(8, ssbos);
+            glDeleteProgram(computeProgram);
+            return;
+        }
 
         for (int b = 0; b < batchSize; b++) {
             int w = batchStart + b;
@@ -195,12 +224,15 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
             }
         }
 
-        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-        std::cout << "Completed batch: " << batchStart << " to "
-                  << (batchStart + batchSize - 1) << std::endl;
+        for (int i = 6; i < 7; i++) {
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[i]);
+            glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+        }
+        
+        tracker.increment_and_print();
     }
 
-    glDeleteBuffers(10, ssbos);
+    glDeleteBuffers(8, ssbos);
     glDeleteProgram(computeProgram);
 
 }
