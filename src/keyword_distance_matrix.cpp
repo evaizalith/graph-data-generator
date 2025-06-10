@@ -12,9 +12,9 @@ KeywordDistanceMatrix::KeywordDistanceMatrix(int n_W, int n_V, int max_weight) {
     W = n_W;
     V = n_V;
     MAX_WEIGHT = max_weight + 1;
-    matrix = new Pair*[W];
+    matrix = new std::atomic<Pair>*[W];
     for (int i = 0; i < W; i++) {
-        matrix[i] = new Pair[V];
+        matrix[i] = new std::atomic<Pair>[V];
     }
 }
 
@@ -28,8 +28,8 @@ KeywordDistanceMatrix::~KeywordDistanceMatrix() {
     }
 }
 
-Pair& KeywordDistanceMatrix::operator()(int w, int v) const {
-    return matrix[w][v];
+Pair KeywordDistanceMatrix::operator()(int w, int v) const {
+    return (matrix[w][v]).load();
 }
 
 Pair KeywordDistanceMatrix::get_size() const {
@@ -39,13 +39,21 @@ Pair KeywordDistanceMatrix::get_size() const {
 
 void KeywordDistanceMatrix::calculate_matrix_cpu(SparseGraph<int>* graph) {
     std::vector<VerboseEdge<int>> list = graph->get_edge_list();
+    if (list.size() == 0) {
+        std::cerr << "No edges found for " << __func__ << std::endl;
+        return;
+    }
 
-    #pragma omp parallel 
+    ProgressTracker tracker("calculate_matrix_cpu", "All keywords processed.", W);
+    tracker.begin();
+
+
+    #pragma omp parallel num_threads(10) 
     {
-        #pragma omp for
+       #pragma omp for 
         for (int w = 0; w < W; w++) {
-            unsigned dist[V];
-            int pred[V];
+            unsigned* dist = new unsigned[V];
+            int* pred = new int[V];
 
             for (int v = 0; v < V; v++) {
                 dist[v] = BIG_NUMBER;
@@ -69,11 +77,12 @@ void KeywordDistanceMatrix::calculate_matrix_cpu(SparseGraph<int>* graph) {
             }
 
             for (int v = 0; v < V; v++) {
-                matrix[w][v].dist = dist[v];
-                matrix[w][v].pred = pred[v];
+                (matrix[w][v]).store({(int)dist[v], pred[v]});
             }
-        int tid = omp_get_thread_num();
-        std::cout << "Thread " << tid << " completed keyword " << w << std::endl;
+            
+            tracker.increment_and_print();
+            delete[] dist;
+            delete[] pred;
         }
     }
 }
@@ -219,8 +228,7 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
         for (int b = 0; b < batchSize; b++) {
             int w = batchStart + b;
             for (int v = 0; v < V; v++) {
-                matrix[w][v].dist = distData[b * V + v];
-                matrix[w][v].pred = predData[b * V + v];
+                (matrix[w][v]).store({(int)distData[b * V + v], predData[b * V + v]});
             }
         }
 
