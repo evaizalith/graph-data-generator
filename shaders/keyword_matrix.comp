@@ -1,0 +1,102 @@
+#version 450
+layout(local_size_x = 256) in;
+
+struct Edge {
+    int start;
+    int end;
+    int weight;
+};
+
+uniform uint V; 
+uniform uint E; 
+uniform uint W;
+
+const uint BIG_NUMBER = 0x7FFFFFFF; // Safe maximum value
+
+layout(std430, binding = 0) buffer EdgeList { Edge edges[]; };
+layout(std430, binding = 1) buffer HasKeyword { uint hasKeyword[]; };
+layout(std430, binding = 2) buffer Dist0 { uint dist0[]; };
+layout(std430, binding = 3) buffer Dist1 { uint dist1[]; };
+layout(std430, binding = 4) buffer Pred0 { int pred0[]; };
+layout(std430, binding = 5) buffer Pred1 { int pred1[]; };
+layout(std430, binding = 6) buffer OutputDist { uint outputDist[]; };
+layout(std430, binding = 7) buffer OutputPred { int outputPred[]; };
+
+void prevent_optimization() {
+    // This will force W to be included in the shader
+    if (W == 0xDEADBEEF) {
+        outputDist[0] = W; // Never actually executes
+    }
+}
+
+void main() {
+    uint w = gl_GlobalInvocationID.x;  // Keyword index in batch
+    if (w >= W) return;
+
+    prevent_optimization();
+
+    for (uint v = 0; v < V; v++) {
+        uint idx = w * V + v;
+        if (hasKeyword[idx] != 0) {
+            dist0[idx] = 0;
+            dist1[idx] = 0;
+            pred0[idx] = int(v);
+            pred1[idx] = int(v);
+        } else {
+            dist0[idx] = BIG_NUMBER;
+            dist1[idx] = BIG_NUMBER;
+            pred0[idx] = -1;
+            pred1[idx] = -1;
+        }
+    }
+
+    barrier();
+    memoryBarrierBuffer();
+
+    for (uint iter = 0; iter < V; iter++) {
+        uint currentBuf = iter % 2;
+        uint nextBuf = 1 - currentBuf;
+
+        for (uint e = 0; e < E; e++) {
+            Edge edge = edges[e];
+            uint u = uint(edge.start);
+            uint v = uint(edge.end);
+            uint weight = uint(edge.weight);
+            uint idx_u = w * V + u;
+
+            uint dist_u = (currentBuf == 0) ? dist0[idx_u] : dist1[idx_u];
+            if (dist_u == BIG_NUMBER) continue;
+
+            uint candidate = dist_u + weight;
+            if (candidate > BIG_NUMBER) continue;
+
+            uint idx_v = w * V + v;
+            if (nextBuf == 0) {
+                uint oldDist = atomicMin(dist0[idx_v], candidate);
+                if (candidate < oldDist) {
+                    pred0[idx_v] = int(edge.start);
+                }
+            } else {
+                uint oldDist = atomicMin(dist1[idx_v], candidate);
+                if (candidate < oldDist) {
+                    pred1[idx_v] = int(edge.start);
+                }
+            }
+        }
+        
+        barrier();
+        memoryBarrierBuffer();
+    }
+
+    uint resultBuf = V % 2;
+    for (uint v = 0; v < V; v++) {
+        uint idx = w * V + v;
+        if (resultBuf == 0) {
+            outputDist[idx] = dist0[idx];
+            outputPred[idx] = pred0[idx];
+        } else {
+            outputDist[idx] = dist1[idx];
+            outputPred[idx] = pred1[idx];
+        }
+    }
+}

@@ -82,7 +82,8 @@ public:
     std::vector<Edge<T>>  get_adjacent(T id);
     std::vector<T>        get_keywords(T id);
 
-    std::vector<VerboseEdge<T>> get_edge_list();                   //!< Produce a new adjacency list 
+    std::vector<VerboseEdge<T>> get_edge_list();                   //!< Produce a new adjacency list  
+    std::vector<T>              get_vertices_with_keyword(int w) const;  //!< Gets all vertices containing a keyword
 
     bool            vertex_exists(T id);
     bool            keyword_is_in(T w, T v);
@@ -274,6 +275,17 @@ std::vector<VerboseEdge<T>> SparseGraph<T>::get_edge_list() {
     }
 
     return list; 
+}
+
+template <typename T>
+std::vector<T> SparseGraph<T>::get_vertices_with_keyword(int w) const {
+    std::vector<T> result;
+    auto range = reverse_index.equal_range(w);
+    for (auto it = range.first; it != range.second; ++it) {
+        result.push_back(it->second);
+    }
+
+    return result;
 }
 
 
