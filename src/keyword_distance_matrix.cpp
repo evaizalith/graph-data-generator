@@ -126,7 +126,7 @@ void KeywordDistanceMatrix::calculate_matrix_gpu(SparseGraph<int>* graph) {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[0]);
     glBufferData(GL_SHADER_STORAGE_BUFFER, edges.size() * sizeof(VerboseEdge<int>), edges.data(), GL_STATIC_DRAW);
 
-    const int dynamicBatchSize = (V > 1000) ? 1 : BATCH_SIZE;
+    dynamicBatchSize = (V > dynamicBatchSizeCutoff) ? minBatchSize : BATCH_SIZE;
 
     ProgressTracker tracker("calculate_matrix_gpu", "All keywords processed.", W / dynamicBatchSize);
     tracker.begin();
