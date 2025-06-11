@@ -48,7 +48,7 @@ void resetView() {
 void keyDistMatrix() {
     KeywordDistanceMatrix mat(graph_p.n_keywords, graph_p.n_vertices, graph_p.max_weight); 
     
-    if (gpuComputation) mat.calculate_matrix_gpu(graph);
+    if (gpuComputation) mat.calculate_matrix_hybrid(graph);
     else mat.calculate_matrix_cpu(graph);
 
     std::cout << "Finished calculating keyword-distance matrix" << std::endl;
@@ -73,7 +73,12 @@ void genGraph() {
             graph_p.max_degree,
             graph_p.min_weight,
             graph_p.max_weight);
-    gpuGraph = new GPUGraph(*graph, graph_p);
+     try {
+         gpuGraph = new GPUGraph(*graph, graph_p);
+    } catch(std::exception& e) {
+        std::cout << "Exception " << e.what() << ", unable to display graph.\n";
+        gpuGraph = nullptr;
+    }
 }
 
 void reshape(int w, int h) {
@@ -189,12 +194,16 @@ void display() {
 
     showMenu(io);
 
-    if (renderGraph) {
-
+    if (gpuGraph && renderGraph) {
+        try {
         gpuGraph->simulate(simSpeed);
         glm::mat4 proj = glm::ortho((d_w + view.x) / view.zoom, ((float)params.width + view.x) / view.zoom, (d_h + view.y) / view.zoom, ((float)params.height + view.y) / view.zoom);
 
         gpuGraph->render(proj);
+        } catch (std::exception& e) {
+            std::cout << "Unable to correctly display or simulate; disabling both\n" << std::endl;
+            renderGraph = false;
+        }
     }
 
     ImGui::Render();

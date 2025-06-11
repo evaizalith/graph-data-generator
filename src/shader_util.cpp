@@ -27,7 +27,7 @@ GLuint compileShader(GLenum type, const std::string& source) {
 std::string readFile(const std::string& path) {
     std::ifstream file(SHADER_PATH + path);
     if (!file.is_open()) {
-        throw std::runtime_error("Failed to open file: " + path);
+        throw std::runtime_error(": Failed to open file: " + path + ". Function " + __func__);
     }
     std::stringstream buffer;
     buffer << file.rdbuf();
@@ -35,7 +35,12 @@ std::string readFile(const std::string& path) {
 }
 
 GLuint createShaderProgram(const std::string& computePath) {
-    std::string computeSource = readFile(computePath);
+    std::string computeSource;
+    try {
+        computeSource = readFile(computePath);
+    } catch (std::exception& e) {
+        throw(e);
+    }
     GLuint computeShader = compileShader(GL_COMPUTE_SHADER, computeSource);
     
     if (!computeShader) return 0;
@@ -59,8 +64,15 @@ GLuint createShaderProgram(const std::string& computePath) {
 }
 
 GLuint createShaderProgram(const std::string& vertPath, const std::string& fragPath) {
-    std::string vertSource = readFile(vertPath);
-    std::string fragSource = readFile(fragPath);
+    std::string vertSource;
+    std::string fragSource;
+
+    try {
+        vertSource = readFile(vertPath);
+        fragSource = readFile(fragPath);
+    } catch (std::exception& e) {
+        throw(e);
+    }
     
     GLuint vertShader = compileShader(GL_VERTEX_SHADER, vertSource);
     GLuint fragShader = compileShader(GL_FRAGMENT_SHADER, fragSource);

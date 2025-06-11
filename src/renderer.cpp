@@ -10,9 +10,13 @@ void GPUGraph::createBuffers() {
 }
 
 void GPUGraph::loadShaders() {
+    try {
         forceSimProgram = createShaderProgram("force_directed.comp");
         nodeShader = createShaderProgram("node.vert", "node.frag");
         edgeShader = createShaderProgram("edge.vert", "edge.frag");
+    } catch (std::exception& e) {
+        throw(e);
+    }
 }
 
 void GPUGraph::updateEdgeBuffer() {
@@ -159,7 +163,6 @@ void GPUGraph::render(glm::mat4 projection) {
             drawPoints(edgePoints.data(), edgePoints.size());
         }
 
-
         glUseProgram(edgeShader);
         glUniformMatrix4fv(glGetUniformLocation(edgeShader, "projection"),
                          1, GL_FALSE, &projection[0][0]);
@@ -168,8 +171,6 @@ void GPUGraph::render(glm::mat4 projection) {
                    params.edge_color.y,
                    params.edge_color.z,
                    params.edge_color.w);
-
-
 
         // Draw all edges
         if (!edgePoints.empty()) {

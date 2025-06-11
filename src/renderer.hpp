@@ -20,7 +20,7 @@ struct GPUEdge {
 
 class GPUGraph {
 public:
-    GPUGraph(SparseGraph<int>& g, GraphParameters& p) : graph(g), params(p) { currentBuffer = 0; createBuffers(); loadShaders(); };
+    GPUGraph(SparseGraph<int>& g, GraphParameters& p) : graph(g), params(p) { currentBuffer = 0; createBuffers(); try {loadShaders(); } catch (std::exception& e) {throw(e);} };
 
     void createBuffers();
     void loadShaders();
